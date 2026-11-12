@@ -13,7 +13,7 @@ export function useInterviews() {
     if (!currentUser) { setLoading(false); return }
     getInterviewsByStudent(currentUser.uid)
       .then(setInterviews)
-      .catch(e => setError(e.message))
+      .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false))
   }, [currentUser])
 

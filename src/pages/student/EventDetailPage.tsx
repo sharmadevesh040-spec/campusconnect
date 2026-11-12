@@ -47,7 +47,7 @@ export default function EventDetailPage() {
       description: event.description,
       location: event.venue || event.meetingLink || 'Online',
       startDate: new Date(event.date),
-      endDate: new Date(event.endDate)
+      endDate: new Date(event.endDate || event.date)
     })
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
     const url = URL.createObjectURL(blob)

@@ -17,7 +17,7 @@ export function useEvents() {
       setEvents(data)
       if (currentUser?.uid) {
         const regs = await getRegistrations(currentUser.uid)
-        setRegistrations(regs)
+        setRegistrations(regs.map(r => r.eventId))
       }
     } catch (e: any) {
       setError(e.message)

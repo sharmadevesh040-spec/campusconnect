@@ -1,9 +1,9 @@
 export enum EventStatus {
-  OPEN = 'open',
-  ALMOST_FULL = 'almost_full',
-  CLOSED = 'closed',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled'
+  OPEN = 'Open',
+  ALMOST_FULL = 'Almost Full',
+  CLOSED = 'Closed',
+  COMPLETED = 'Completed',
+  CANCELLED = 'Cancelled'
 }
 
 export interface Event {
@@ -11,17 +11,20 @@ export interface Event {
   title: string
   description: string
   date: Date
-  endDate: Date
+  endDate?: Date
   time: string
   venue: string
-  meetingLink: string
+  meetingLink?: string
   organizer: string
-  maxParticipants: number
+  maxParticipants?: number
+  maxCapacity?: number
   registeredCount: number
   registrationDeadline: Date
   status: EventStatus
-  imageURL: string
-  tags: string[]
+  isRegistered?: boolean
+  bannerURL?: string
+  imageURL?: string
+  tags?: string[]
   createdAt: Date
   updatedAt: Date
 }
@@ -31,5 +34,5 @@ export interface EventRegistration {
   eventId: string
   studentId: string
   registeredAt: Date
-  status: 'registered' | 'cancelled' | 'attended'
+  status: 'Registered' | 'Cancelled' | 'Attended'
 }

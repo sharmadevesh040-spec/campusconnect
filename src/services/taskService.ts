@@ -1,121 +1,72 @@
-import {
-  collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, Timestamp
-} from 'firebase/firestore'
-import { db, isFirebaseConfigured } from '@/lib/firebase'
+import { apiRequest } from './api'
 import type { Task } from '@/types'
-import { TaskStatus } from '@/types'
+import { TaskStatus, TaskPriority } from '@/types/task'
 import { SEED_TASKS } from '@/lib/mockData'
 
-const COL = 'tasks'
-const STORAGE_KEY = 'campusconnect_tasks'
+const CACHE_KEY = 'campusconnect_tasks_cache'
 
-function getLocalStore(): Task[] {
+function mapTask(item: any): Task {
+  return {
+    id: item.id,
+    studentId: item.student_id || item.studentId,
+    title: item.title,
+    description: item.description || '',
+    deadline: new Date(item.deadline),
+    priority: (item.priority as TaskPriority) || TaskPriority.MEDIUM,
+    status: (item.status as TaskStatus) || TaskStatus.PENDING,
+    attachmentURL: item.attachmentURL || item.attachment_url || '',
+    createdAt: new Date(item.created_at || Date.now()),
+    updatedAt: new Date(item.updated_at || Date.now())
+  }
+}
+
+export async function getTasks(studentId?: string): Promise<Task[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_TASKS))
-      return SEED_TASKS
-    }
-    const parsed = JSON.parse(raw)
-    return parsed.map((item: any) => ({
-      ...item,
-      deadline: new Date(item.deadline),
-      completedAt: item.completedAt ? new Date(item.completedAt) : undefined,
-      createdAt: new Date(item.createdAt),
-      updatedAt: new Date(item.updatedAt)
-    }))
+    const list = await apiRequest<any[]>('/api/student/tasks')
+    const mapped = list.map(mapTask)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(mapped))
+    return mapped
+  } catch {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) return JSON.parse(cached)
+    return SEED_TASKS
+  }
+}
+
+export async function getTasksByStudent(studentId: string): Promise<Task[]> {
+  return getTasks(studentId)
+}
+
+export async function getAllTasks(): Promise<Task[]> {
+  try {
+    const list = await apiRequest<any[]>('/api/admin/tasks')
+    return list.map(mapTask)
   } catch {
     return SEED_TASKS
   }
 }
 
-function saveLocalStore(items: Task[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch (e) {
-    console.error('Failed to save tasks', e)
-  }
-}
-
-function fromFirestore(data: Record<string, unknown>): Task {
-  return {
-    ...data,
-    deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : new Date(data.deadline as string),
-    completedAt: data.completedAt instanceof Timestamp ? data.completedAt.toDate() : data.completedAt ? new Date(data.completedAt as string) : undefined,
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as string),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as string),
-  } as Task
-}
-
-export async function getTasksByStudent(uid: string): Promise<Task[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, COL), where('studentId', '==', uid), orderBy('deadline', 'asc'))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => fromFirestore({ id: d.id, ...d.data() }))
-  }
-  const all = getLocalStore()
-  return all.filter(t => t.studentId === uid || t.studentId === 'student-1')
-}
-
-export async function getAllTasks(): Promise<Task[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, COL), orderBy('deadline', 'asc'))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => fromFirestore({ id: d.id, ...d.data() }))
-  }
-  return getLocalStore()
+export async function createTask(data: any): Promise<string> {
+  const res = await apiRequest<any>('/api/admin/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      studentId: data.studentId,
+      title: data.title,
+      description: data.description,
+      deadline: typeof data.deadline === 'string' ? data.deadline : data.deadline.toISOString().split('T')[0],
+      priority: data.priority
+    })
+  })
+  return res.id
 }
 
 export async function updateTaskStatus(id: string, status: TaskStatus): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    if (status === TaskStatus.COMPLETED) {
-      await updateDoc(doc(db, COL, id), { status, updatedAt: serverTimestamp(), completedAt: serverTimestamp() })
-    } else {
-      await updateDoc(doc(db, COL, id), { status, updatedAt: serverTimestamp() })
-    }
-    return
-  }
-  const all = getLocalStore()
-  const idx = all.findIndex(t => t.id === id)
-  if (idx !== -1) {
-    all[idx].status = status
-    all[idx].updatedAt = new Date()
-    if (status === TaskStatus.COMPLETED) {
-      all[idx].completedAt = new Date()
-    } else {
-      all[idx].completedAt = undefined
-    }
-    saveLocalStore(all)
-  }
-}
-
-export async function createTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  if (isFirebaseConfigured && db) {
-    const ref = await addDoc(collection(db, COL), {
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-    return ref.id
-  }
-  const id = `task-${Date.now()}`
-  const newTask: Task = {
-    ...data,
-    id,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }
-  const all = getLocalStore()
-  saveLocalStore([newTask, ...all])
-  return id
+  await apiRequest(`/api/student/tasks/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  })
 }
 
 export async function deleteTask(id: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await deleteDoc(doc(db, COL, id))
-    return
-  }
-  const all = getLocalStore()
-  saveLocalStore(all.filter(t => t.id !== id))
+  await apiRequest(`/api/admin/tasks/${id}`, { method: 'DELETE' })
 }

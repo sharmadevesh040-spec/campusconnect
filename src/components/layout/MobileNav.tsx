@@ -3,11 +3,11 @@ import { Home, Calendar, CheckSquare, Award, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV = [
-  { to: '/dashboard', icon: Home, label: 'Home' },
-  { to: '/calendar', icon: Calendar, label: 'Calendar' },
-  { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
-  { to: '/certificates', icon: Award, label: 'Certs' },
-  { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/student/dashboard', icon: Home, label: 'Home' },
+  { to: '/student/calendar', icon: Calendar, label: 'Calendar' },
+  { to: '/student/tasks', icon: CheckSquare, label: 'Tasks' },
+  { to: '/student/certificates', icon: Award, label: 'Certs' },
+  { to: '/student/profile', icon: User, label: 'Profile' },
 ]
 
 export function MobileNav() {

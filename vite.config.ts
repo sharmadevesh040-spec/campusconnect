@@ -25,19 +25,19 @@ export default defineConfig({
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ],
         shortcuts: [
-          { name: 'Dashboard', url: '/dashboard', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
-          { name: 'Calendar', url: '/calendar', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
-          { name: 'Certificates', url: '/certificates', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
-          { name: 'Interviews', url: '/interviews', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] }
+          { name: 'Dashboard', url: '/student/dashboard', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Calendar', url: '/student/calendar', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Certificates', url: '/student/certificates', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Interviews', url: '/student/interviews', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] }
         ]
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
+            urlPattern: /^\/api\/student\/.*/i,
             handler: 'NetworkFirst',
-            options: { cacheName: 'firebase-cache', expiration: { maxEntries: 100, maxAgeSeconds: 86400 } }
+            options: { cacheName: 'api-student-cache', expiration: { maxEntries: 50, maxAgeSeconds: 3600 } }
           },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -48,6 +48,14 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      }
+    }
+  },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {

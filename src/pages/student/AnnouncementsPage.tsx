@@ -62,7 +62,7 @@ export default function AnnouncementsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span>{format(a.publishedAt, 'dd MMM yyyy')}</span>
+                      <span>{format(a.publishedAt || a.createdAt || Date.now(), 'dd MMM yyyy')}</span>
                       {a.category && <><span>·</span><span>{a.category}</span></>}
                       {a.attachmentURL && <><span>·</span><Paperclip className="w-3 h-3" /></>}
                     </div>

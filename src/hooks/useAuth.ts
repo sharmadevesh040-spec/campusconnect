@@ -1,2 +1,4 @@
-import { useAuthContext } from '@/contexts/AuthContext'
-export function useAuth() { return useAuthContext() }
+import { useAuth as useAuthFromContext } from '@/contexts/AuthContext'
+export function useAuth() {
+  return useAuthFromContext()
+}

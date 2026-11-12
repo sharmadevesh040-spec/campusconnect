@@ -163,9 +163,9 @@ export default function AdminEventsPage() {
                       date: format(new Date(event.date), 'yyyy-MM-dd'),
                       time: event.time,
                       venue: event.venue,
-                      meetingLink: event.meetingLink,
+                      meetingLink: event.meetingLink || '',
                       organizer: event.organizer,
-                      maxParticipants: event.maxParticipants,
+                      maxParticipants: event.maxParticipants || event.maxCapacity || 100,
                       status: event.status,
                       imageURL: event.imageURL || '',
                       tags: event.tags || []

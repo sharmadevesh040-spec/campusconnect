@@ -1,64 +1,61 @@
-import {
-  collection, getDocs, addDoc,
-  query, where, orderBy, serverTimestamp
-} from 'firebase/firestore'
-import { db, isFirebaseConfigured } from '@/lib/firebase'
+import { apiRequest } from './api'
 import type { Resource } from '@/types'
+import { ResourceCategory, ResourceType } from '@/types/resource'
 import { SEED_RESOURCES } from '@/lib/mockData'
 
-const COL = 'resources'
-const STORAGE_KEY = 'campusconnect_resources'
+const CACHE_KEY = 'campusconnect_resources_cache'
 
-function getLocalStore(): Resource[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_RESOURCES))
-      return SEED_RESOURCES
-    }
-    const parsed = JSON.parse(raw)
-    return parsed.map((item: any) => ({
-      ...item,
-      createdAt: new Date(item.createdAt),
-      updatedAt: new Date(item.updatedAt)
-    }))
-  } catch {
-    return SEED_RESOURCES
+function mapRes(item: any): Resource {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description || '',
+    category: item.category || ResourceCategory.INTERVIEW_PREP,
+    type: item.type || ResourceType.PDF,
+    url: item.url,
+    fileSize: item.fileSize || '1.2 MB',
+    tags: [item.category || 'General'],
+    isFeatured: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
   }
 }
 
 export async function getResources(category?: string): Promise<Resource[]> {
-  if (isFirebaseConfigured && db) {
-    let q = query(collection(db, COL), orderBy('createdAt', 'desc'))
+  try {
+    const list = await apiRequest<any[]>('/api/student/resources')
+    let mapped = list.map(mapRes)
     if (category) {
-      q = query(collection(db, COL), where('category', '==', category), orderBy('createdAt', 'desc'))
+      mapped = mapped.filter(r => r.category.toLowerCase() === category.toLowerCase())
     }
-    const snap = await getDocs(q)
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Resource))
+    localStorage.setItem(CACHE_KEY, JSON.stringify(mapped))
+    return mapped
+  } catch {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) {
+      const parsed: Resource[] = JSON.parse(cached)
+      if (category) return parsed.filter(r => r.category.toLowerCase() === category.toLowerCase())
+      return parsed
+    }
+    if (category) return SEED_RESOURCES.filter(r => r.category.toLowerCase() === category.toLowerCase())
+    return SEED_RESOURCES
   }
-  const all = getLocalStore()
-  if (!category || category === 'All') return all
-  return all.filter(r => r.category.toLowerCase() === category.toLowerCase())
 }
 
-export async function createResource(data: Omit<Resource, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  if (isFirebaseConfigured && db) {
-    const ref = await addDoc(collection(db, COL), {
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+export async function createResource(data: any): Promise<string> {
+  const res = await apiRequest<any>('/api/admin/resources', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: data.title,
+      description: data.description,
+      category: data.category,
+      type: data.type,
+      url: data.url
     })
-    return ref.id
-  }
-  const id = `res-${Date.now()}`
-  const newR: Resource = {
-    ...data,
-    id,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }
-  const all = getLocalStore()
-  all.unshift(newR)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(all))
-  return id
+  })
+  return res.id
+}
+
+export async function deleteResource(id: string): Promise<void> {
+  await apiRequest(`/api/admin/resources/${id}`, { method: 'DELETE' })
 }

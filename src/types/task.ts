@@ -1,8 +1,15 @@
 export enum TaskStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  OVERDUE = 'overdue'
+  PENDING = 'Pending',
+  IN_PROGRESS = 'In Progress',
+  COMPLETED = 'Completed',
+  OVERDUE = 'Overdue'
+}
+
+export enum TaskPriority {
+  LOW = 'Low',
+  MEDIUM = 'Medium',
+  HIGH = 'High',
+  URGENT = 'Urgent'
 }
 
 export interface Task {
@@ -12,8 +19,8 @@ export interface Task {
   description: string
   deadline: Date
   status: TaskStatus
-  priority: 'low' | 'medium' | 'high'
-  attachmentURL: string
+  priority: TaskPriority | 'low' | 'medium' | 'high' | 'urgent'
+  attachmentURL?: string
   completedAt?: Date
   createdAt: Date
   updatedAt: Date

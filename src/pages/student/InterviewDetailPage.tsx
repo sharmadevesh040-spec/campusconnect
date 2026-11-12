@@ -36,9 +36,10 @@ export default function InterviewDetailPage() {
 
   const addToCalendar = () => {
     const end = new Date(interviewDateTime.getTime() + (interview.duration || 60) * 60000)
+    const interviewTitle = interview.title || interview.programName || 'Interview'
     const ics = createICSEvent({
-      title: interview.title,
-      description: `Interview with ${interview.organization}\\n\\nInterviewer: ${interview.interviewer}\\n\\nInstructions: ${interview.instructions}`,
+      title: interviewTitle,
+      description: `Interview with ${interview.organization || interview.programName || 'CampusConnect'}\\n\\nInterviewer: ${interview.interviewer || interview.interviewerName || 'Coordinator'}\\n\\nInstructions: ${interview.instructions || ''}`,
       location: interview.location || interview.meetingLink || 'Online',
       startDate: interviewDateTime,
       endDate: end
@@ -47,7 +48,7 @@ export default function InterviewDetailPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${interview.title.replace(/[^a-zA-Z0-9]/g, '_')}.ics`
+    a.download = `${interviewTitle.replace(/[^a-zA-Z0-9]/g, '_')}.ics`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

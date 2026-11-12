@@ -261,7 +261,7 @@ export default function DashboardPage() {
                     {!a.isRead && <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />}
                     <div className={`flex-1 min-w-0 ${a.isRead ? 'pl-4' : ''}`}>
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{a.title}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{format(a.publishedAt, 'dd MMM yyyy')}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{format(a.publishedAt || a.createdAt || Date.now(), 'dd MMM yyyy')}</p>
                     </div>
                     <Badge variant={a.priority === 'urgent' ? 'danger' : a.priority === 'high' ? 'warning' : 'default'}>
                       {a.priority}

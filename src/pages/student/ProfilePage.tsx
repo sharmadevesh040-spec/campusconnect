@@ -157,7 +157,7 @@ export default function ProfilePage() {
           <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-700">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Skills & Specializations</h3>
             <div className="flex flex-wrap gap-1.5">
-              {userProfile.skills.map(s => (
+              {userProfile.skills.map((s: string) => (
                 <Badge key={s} variant="primary" className="text-xs py-1">
                   {s}
                 </Badge>

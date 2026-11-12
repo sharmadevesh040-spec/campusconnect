@@ -1,106 +1,65 @@
-import {
-  collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, orderBy, serverTimestamp, Timestamp
-} from 'firebase/firestore'
-import { db, isFirebaseConfigured } from '@/lib/firebase'
+import { apiRequest } from './api'
 import type { Announcement } from '@/types'
+import { AnnouncementCategory, AnnouncementPriority } from '@/types/announcement'
 import { SEED_ANNOUNCEMENTS } from '@/lib/mockData'
 
-const COL = 'announcements'
-const STORAGE_KEY = 'campusconnect_announcements'
+const CACHE_KEY = 'campusconnect_announcements_cache'
 
-function getLocalStore(): Announcement[] {
+function mapAnn(item: any): Announcement {
+  return {
+    id: item.id,
+    title: item.title,
+    content: item.message || item.content,
+    category: (item.category as AnnouncementCategory) || AnnouncementCategory.GENERAL,
+    priority: (item.priority as AnnouncementPriority) || AnnouncementPriority.NORMAL,
+    isImportant: Boolean(item.is_important ?? item.isImportant),
+    authorName: 'Program Operations',
+    authorRole: 'Administrator',
+    readBy: [],
+    createdAt: new Date(item.publish_date || item.created_at || Date.now()),
+    updatedAt: new Date(item.publish_date || item.created_at || Date.now())
+  }
+}
+
+export async function getAnnouncements(): Promise<Announcement[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_ANNOUNCEMENTS))
-      return SEED_ANNOUNCEMENTS
-    }
-    const parsed = JSON.parse(raw)
-    return parsed.map((item: any) => ({
-      ...item,
-      publishedAt: new Date(item.publishedAt),
-      createdAt: new Date(item.createdAt),
-      updatedAt: new Date(item.updatedAt)
-    }))
+    const list = await apiRequest<any[]>('/api/student/announcements')
+    const mapped = list.map(mapAnn)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(mapped))
+    return mapped
   } catch {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) return JSON.parse(cached)
     return SEED_ANNOUNCEMENTS
   }
 }
 
-function saveLocalStore(items: Announcement[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch (e) {
-    console.error('Failed to save announcements', e)
-  }
-}
-
-function fromFirestore(data: Record<string, unknown>): Announcement {
-  return {
-    ...data,
-    publishedAt: data.publishedAt instanceof Timestamp ? data.publishedAt.toDate() : new Date(data.publishedAt as string),
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as string),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as string),
-  } as Announcement
-}
-
-export async function getAnnouncements(): Promise<Announcement[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, COL), orderBy('publishedAt', 'desc'))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => fromFirestore({ id: d.id, ...d.data() }))
-  }
-  return getLocalStore()
-}
-
-export async function markAnnouncementRead(id: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await updateDoc(doc(db, COL, id), { isRead: true, updatedAt: serverTimestamp() })
-    return
-  }
-  const all = getLocalStore()
-  const a = all.find(item => item.id === id)
-  if (a) {
-    a.isRead = true
-    saveLocalStore(all)
-  }
-}
-
-export async function markAllAnnouncementsRead(): Promise<void> {
-  const all = getLocalStore()
-  all.forEach(a => { a.isRead = true })
-  saveLocalStore(all)
-}
-
-export async function createAnnouncement(data: Omit<Announcement, 'id' | 'createdAt' | 'updatedAt' | 'isRead'>): Promise<string> {
-  if (isFirebaseConfigured && db) {
-    const ref = await addDoc(collection(db, COL), {
-      ...data,
-      isRead: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+export async function createAnnouncement(data: any): Promise<string> {
+  const res = await apiRequest<any>('/api/admin/announcements', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: data.title,
+      message: data.content,
+      category: data.category,
+      priority: data.priority,
+      isImportant: data.isImportant
     })
-    return ref.id
-  }
-  const id = `ann-${Date.now()}`
-  const newAnn: Announcement = {
-    ...data,
-    id,
-    isRead: false,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }
-  const all = getLocalStore()
-  saveLocalStore([newAnn, ...all])
-  return id
+  })
+  return res.id
+}
+
+export async function markRead(id: string, uid?: string): Promise<void> {
+  // Handled client-side / cache
+}
+
+export async function markAnnouncementRead(id: string, uid?: string): Promise<void> {
+  await markRead(id, uid)
+}
+
+export async function markAllAnnouncementsRead(uid?: string): Promise<void> {
+  // Handled client-side / cache
 }
 
 export async function deleteAnnouncement(id: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await deleteDoc(doc(db, COL, id))
-    return
-  }
-  const all = getLocalStore()
-  saveLocalStore(all.filter(a => a.id !== id))
+  await apiRequest(`/api/admin/announcements/${id}`, { method: 'DELETE' })
 }

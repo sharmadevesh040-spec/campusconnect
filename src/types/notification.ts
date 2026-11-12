@@ -6,17 +6,27 @@ export enum NotificationType {
   TASK_DEADLINE = 'task_deadline',
   SCHEDULE_CHANGE = 'schedule_change',
   SELECTION_UPDATE = 'selection_update',
+  INTERVIEW = 'interview',
+  EVENT = 'event',
+  CERTIFICATE = 'certificate',
+  ANNOUNCEMENT = 'announcement',
+  TASK = 'task',
   SYSTEM = 'system'
 }
 
 export interface AppNotification {
   id: string
   userId: string
-  type: NotificationType
+  type: NotificationType | string
   title: string
-  message: string
-  isRead: boolean
-  relatedId: string
-  relatedType: string
+  message?: string
+  body?: string
+  link?: string
+  isRead?: boolean
+  read?: boolean
+  relatedId?: string
+  relatedType?: string
   createdAt: Date
 }
+
+export type Notification = AppNotification

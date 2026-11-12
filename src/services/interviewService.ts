@@ -1,105 +1,136 @@
-import {
-  collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, Timestamp
-} from 'firebase/firestore'
-import { db, isFirebaseConfigured } from '@/lib/firebase'
+import { apiRequest } from './api'
 import type { Interview } from '@/types'
+import { InterviewStatus, InterviewType } from '@/types/interview'
 import { SEED_INTERVIEWS } from '@/lib/mockData'
 
-const COL = 'interviews'
-const STORAGE_KEY = 'campusconnect_interviews'
+const CACHE_KEY = 'campusconnect_interviews_cache'
 
-function getLocalStore(): Interview[] {
+function mapInterview(item: any): Interview {
+  return {
+    id: item.id,
+    studentId: item.student_id || item.studentId,
+    studentName: item.studentName || 'Student',
+    programName: item.organization || item.programName || item.title || 'CampusConnect Ambassador',
+    title: item.title || item.programName || 'Interview',
+    organization: item.organization || 'CampusConnect Ambassador Program',
+    interviewer: item.interviewer || item.interviewerName || 'Program Coordinator',
+    interviewerName: item.interviewer || item.interviewerName || 'Program Coordinator',
+    interviewerRole: 'Interviewer',
+    interviewerEmail: item.studentEmail || '',
+    date: new Date(item.date),
+    time: item.time,
+    duration: item.duration || 45,
+    type: (item.type as InterviewType) || InterviewType.ONLINE,
+    interviewType: (item.type as InterviewType) || InterviewType.ONLINE,
+    location: item.location || 'Online Room',
+    meetingLink: item.meeting_link || item.meetingLink,
+    status: (item.status as InterviewStatus) || InterviewStatus.SCHEDULED,
+    instructions: item.instructions || '',
+    feedback: item.feedback,
+    createdAt: new Date(item.created_at || Date.now()),
+    updatedAt: new Date(item.updated_at || Date.now())
+  }
+}
+
+export async function getInterviews(studentId?: string): Promise<Interview[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_INTERVIEWS))
-      return SEED_INTERVIEWS
-    }
-    const parsed = JSON.parse(raw)
-    return parsed.map((item: any) => ({
-      ...item,
-      date: new Date(item.date),
-      createdAt: new Date(item.createdAt),
-      updatedAt: new Date(item.updatedAt)
-    }))
+    const data = await apiRequest<any[]>('/api/student/interviews')
+    const mapped = data.map(mapInterview)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(mapped))
+    return mapped
+  } catch {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) return JSON.parse(cached)
+    return SEED_INTERVIEWS
+  }
+}
+
+export async function getInterviewsByStudent(studentId: string): Promise<Interview[]> {
+  return getInterviews(studentId)
+}
+
+export async function getAllInterviews(): Promise<Interview[]> {
+  try {
+    const data = await apiRequest<any[]>('/api/admin/interviews')
+    return data.map(mapInterview)
   } catch {
     return SEED_INTERVIEWS
   }
 }
 
-function saveLocalStore(items: Interview[]) {
+export async function getInterview(id: string): Promise<Interview | null> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch (e) {
-    console.error('Failed to save interviews to localStorage', e)
+    const item = await apiRequest<any>(`/api/student/interviews/${id}`)
+    return mapInterview(item)
+  } catch {
+    const all = await getInterviews()
+    return all.find(i => i.id === id) || null
   }
 }
 
-function fromFirestore(data: Record<string, unknown>): Interview {
-  return {
-    ...data,
-    date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as string),
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as string),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as string),
-  } as Interview
-}
-
-export async function getInterviewsByStudent(uid: string): Promise<Interview[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, COL), where('studentId', '==', uid), orderBy('date', 'asc'))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => fromFirestore({ id: d.id, ...d.data() }))
-  }
-  const all = getLocalStore()
-  // in dev mode return relevant or all if student has assignments
-  return all.filter(i => i.studentId === uid || i.studentId === 'student-1')
-}
-
-export async function getAllInterviews(): Promise<Interview[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, COL), orderBy('date', 'asc'))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => fromFirestore({ id: d.id, ...d.data() }))
-  }
-  return getLocalStore()
-}
-
-export async function createInterview(data: Omit<Interview, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  if (isFirebaseConfigured && db) {
-    const ref = await addDoc(collection(db, COL), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
-    return ref.id
-  }
-  const id = `int-${Date.now()}`
-  const newInt: Interview = {
-    ...data,
-    id,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }
-  const current = getLocalStore()
-  saveLocalStore([newInt, ...current])
-  return id
+export async function createInterview(data: any): Promise<string> {
+  const res = await apiRequest<any>('/api/admin/interviews', {
+    method: 'POST',
+    body: JSON.stringify({
+      studentId: data.studentId,
+      title: data.programName || data.title,
+      organization: data.programName || data.organization,
+      date: typeof data.date === 'string' ? data.date : data.date.toISOString().split('T')[0],
+      time: data.time,
+      duration: data.duration,
+      type: data.type || data.interviewType,
+      location: data.location,
+      meetingLink: data.meetingLink,
+      interviewer: data.interviewerName || data.interviewer,
+      instructions: data.instructions
+    })
+  })
+  return res.id
 }
 
 export async function updateInterview(id: string, data: Partial<Interview>): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await updateDoc(doc(db, COL, id), { ...data, updatedAt: serverTimestamp() })
-    return
-  }
-  const current = getLocalStore()
-  const idx = current.findIndex(i => i.id === id)
-  if (idx !== -1) {
-    current[idx] = { ...current[idx], ...data, updatedAt: new Date() }
-    saveLocalStore(current)
-  }
+  await apiRequest(`/api/admin/interviews/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      date: data.date ? (typeof data.date === 'string' ? data.date : data.date.toISOString().split('T')[0]) : undefined,
+      time: data.time,
+      status: data.status,
+      instructions: data.instructions,
+      meetingLink: data.meetingLink
+    })
+  })
 }
 
 export async function deleteInterview(id: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await deleteDoc(doc(db, COL, id))
-    return
-  }
-  const current = getLocalStore()
-  saveLocalStore(current.filter(i => i.id !== id))
+  await apiRequest(`/api/admin/interviews/${id}`, { method: 'DELETE' })
+}
+
+export async function updateStatus(id: string, status: InterviewStatus): Promise<void> {
+  await apiRequest(`/api/admin/interviews/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  })
+}
+
+export function generateICS(interview: Interview): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const d = new Date(interview.date)
+  const [hours, minutes] = (interview.time || '10:00').replace(/[^0-9:]/g, '').split(':').map(Number)
+  const dtStart = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(hours || 10)}${pad(minutes || 0)}00Z`
+  const dtEnd = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad((hours || 10) + 1)}${pad(minutes || 0)}00Z`
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//CampusConnect//Student Hub//EN',
+    'BEGIN:VEVENT',
+    `SUMMARY:${interview.programName || interview.title} Interview`,
+    `DESCRIPTION:${interview.instructions || 'CampusConnect Ambassador Interview'}\\nMeeting Link: ${interview.meetingLink || 'N/A'}`,
+    `LOCATION:${interview.location || 'Online'}`,
+    `DTSTART:${dtStart}`,
+    `DTEND:${dtEnd}`,
+    `STATUS:CONFIRMED`,
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n')
 }

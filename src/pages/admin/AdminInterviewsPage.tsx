@@ -180,19 +180,19 @@ export default function AdminInterviewsPage() {
                     onClick={() => {
                       setEditingId(i.id)
                       setFormData({
-                        title: i.title,
-                        organization: i.organization,
+                        title: i.title || i.programName || '',
+                        organization: i.organization || i.programName || '',
                         studentId: i.studentId,
                         date: format(new Date(i.date), 'yyyy-MM-dd'),
                         time: i.time,
-                        duration: i.duration,
-                        interviewType: i.interviewType,
-                        location: i.location,
-                        meetingLink: i.meetingLink,
-                        interviewer: i.interviewer,
-                        instructions: i.instructions,
+                        duration: i.duration || 45,
+                        interviewType: (i.interviewType || i.type || InterviewType.ONLINE) as any,
+                        location: i.location || '',
+                        meetingLink: i.meetingLink || '',
+                        interviewer: i.interviewer || i.interviewerName || '',
+                        instructions: i.instructions || '',
                         status: i.status,
-                        notes: i.notes
+                        notes: i.notes || ''
                       })
                       setIsModalOpen(true)
                     }}

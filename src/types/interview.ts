@@ -1,36 +1,44 @@
 export enum InterviewStatus {
-  SCHEDULED = 'scheduled',
-  CONFIRMED = 'confirmed',
-  COMPLETED = 'completed',
-  RESCHEDULED = 'rescheduled',
-  CANCELLED = 'cancelled',
-  SELECTED = 'selected',
-  REJECTED = 'rejected',
-  PENDING = 'pending'
+  SCHEDULED = 'Scheduled',
+  CONFIRMED = 'Confirmed',
+  COMPLETED = 'Completed',
+  RESCHEDULED = 'Rescheduled',
+  CANCELLED = 'Cancelled',
+  SELECTED = 'Selected',
+  REJECTED = 'Rejected',
+  PENDING = 'Pending'
 }
 
 export enum InterviewType {
-  ONLINE = 'online',
-  OFFLINE = 'offline',
-  PHONE = 'phone',
-  GROUP = 'group'
+  ONLINE = 'Online',
+  OFFLINE = 'Offline',
+  PHONE = 'Phone',
+  HYBRID = 'Hybrid',
+  GROUP = 'Group'
 }
 
 export interface Interview {
   id: string
   studentId: string
-  title: string
-  organization: string
+  studentName?: string
+  programName?: string
+  title?: string
+  organization?: string
   date: Date
   time: string
-  duration: number
-  interviewType: InterviewType
-  location: string
-  meetingLink: string
-  interviewer: string
-  instructions: string
+  duration?: number
+  type?: InterviewType
+  interviewType?: InterviewType
+  location?: string
+  meetingLink?: string
+  interviewer?: string
+  interviewerName?: string
+  interviewerRole?: string
+  interviewerEmail?: string
+  instructions?: string
+  feedback?: string
+  notes?: string
   status: InterviewStatus
-  notes: string
   createdAt: Date
   updatedAt: Date
 }

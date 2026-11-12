@@ -1,179 +1,125 @@
-import {
-  collection, doc, getDoc, getDocs, addDoc, updateDoc,
-  query, orderBy, serverTimestamp, Timestamp, where
-} from 'firebase/firestore'
-import { db, isFirebaseConfigured } from '@/lib/firebase'
+import { apiRequest } from './api'
 import type { Event, EventRegistration } from '@/types'
-import { EventStatus } from '@/types'
+import { EventStatus } from '@/types/event'
 import { SEED_EVENTS } from '@/lib/mockData'
 
-const COL = 'events'
-const REG_COL = 'eventRegistrations'
-const STORAGE_KEY = 'campusconnect_events'
-const REG_STORAGE_KEY = 'campusconnect_event_registrations'
+const CACHE_KEY = 'campusconnect_events_cache'
 
-function getLocalStore(): Event[] {
+function mapEvent(item: any): Event {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    date: new Date(item.date),
+    time: item.time,
+    venue: item.venue,
+    meetingLink: item.meeting_link || item.meetingLink,
+    organizer: item.organizer,
+    registrationDeadline: new Date(item.registration_deadline || item.registrationDeadline || item.date),
+    registeredCount: item.attendeeCount || item.registeredCount || 0,
+    maxCapacity: item.max_participants || item.maxCapacity || 100,
+    maxParticipants: item.max_participants || item.maxCapacity || 100,
+    isRegistered: Boolean(item.isRegistered),
+    status: (item.status as EventStatus) || EventStatus.OPEN,
+    bannerURL: item.banner_url || item.bannerURL,
+    imageURL: item.banner_url || item.bannerURL,
+    createdAt: new Date(item.created_at || Date.now()),
+    updatedAt: new Date(item.updated_at || Date.now())
+  }
+}
+
+export async function getEvents(): Promise<Event[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_EVENTS))
-      return SEED_EVENTS
-    }
-    const parsed = JSON.parse(raw)
-    return parsed.map((item: any) => ({
-      ...item,
-      date: new Date(item.date),
-      endDate: new Date(item.endDate),
-      registrationDeadline: new Date(item.registrationDeadline),
-      createdAt: new Date(item.createdAt),
-      updatedAt: new Date(item.updatedAt)
-    }))
+    const list = await apiRequest<any[]>('/api/student/events')
+    const mapped = list.map(mapEvent)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(mapped))
+    return mapped
+  } catch {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) return JSON.parse(cached)
+    return SEED_EVENTS
+  }
+}
+
+export async function getAllEvents(): Promise<Event[]> {
+  try {
+    const list = await apiRequest<any[]>('/api/admin/events')
+    return list.map(mapEvent)
   } catch {
     return SEED_EVENTS
   }
 }
 
-function saveLocalStore(items: Event[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch (e) {
-    console.error('Failed to save events to localStorage', e)
-  }
-}
-
-function getLocalRegistrations(): string[] {
-  try {
-    const raw = localStorage.getItem(REG_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : ['ev-1'] // default enrolled in summit
-  } catch {
-    return ['ev-1']
-  }
-}
-
-function saveLocalRegistrations(ids: string[]) {
-  try {
-    localStorage.setItem(REG_STORAGE_KEY, JSON.stringify(ids))
-  } catch (e) {
-    console.error('Failed to save registrations', e)
-  }
-}
-
-function fromFirestore(data: Record<string, unknown>): Event {
-  return {
-    ...data,
-    date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as string),
-    endDate: data.endDate instanceof Timestamp ? data.endDate.toDate() : new Date(data.endDate as string),
-    registrationDeadline: data.registrationDeadline instanceof Timestamp ? data.registrationDeadline.toDate() : new Date(data.registrationDeadline as string),
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as string),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as string),
-  } as Event
-}
-
-export async function getEvents(): Promise<Event[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, COL), orderBy('date', 'asc'))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => fromFirestore({ id: d.id, ...d.data() }))
-  }
-  return getLocalStore()
-}
-
 export async function getEvent(id: string): Promise<Event | null> {
-  if (isFirebaseConfigured && db) {
-    const snap = await getDoc(doc(db, COL, id))
-    if (!snap.exists()) return null
-    return fromFirestore({ id: snap.id, ...snap.data() })
-  }
-  return getLocalStore().find(e => e.id === id) || null
+  const all = await getEvents()
+  return all.find(e => e.id === id) || null
 }
 
-export async function createEvent(data: Omit<Event, 'id' | 'createdAt' | 'updatedAt' | 'registeredCount'>): Promise<string> {
-  if (isFirebaseConfigured && db) {
-    const ref = await addDoc(collection(db, COL), {
-      ...data,
-      registeredCount: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-    return ref.id
-  }
-  const id = `ev-${Date.now()}`
-  const newEv: Event = {
-    ...data,
-    id,
-    registeredCount: 0,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }
-  const all = getLocalStore()
-  saveLocalStore([newEv, ...all])
-  return id
-}
-
-export async function updateEvent(id: string, data: Partial<Event>): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await updateDoc(doc(db, COL, id), { ...data, updatedAt: serverTimestamp() })
-    return
-  }
-  const all = getLocalStore()
-  const idx = all.findIndex(e => e.id === id)
-  if (idx !== -1) {
-    all[idx] = { ...all[idx], ...data, updatedAt: new Date() }
-    saveLocalStore(all)
-  }
-}
-
-export async function deleteEvent(id: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    // Delete from firestore
-    const { deleteDoc } = await import('firebase/firestore')
-    await deleteDoc(doc(db, COL, id))
-    return
-  }
-  const all = getLocalStore()
-  saveLocalStore(all.filter(e => e.id !== id))
+export async function getRegistrations(studentId: string): Promise<EventRegistration[]> {
+  const events = await getEvents()
+  return events.filter(e => e.isRegistered).map(e => ({
+    id: 'reg-' + e.id,
+    eventId: e.id,
+    studentId,
+    registeredAt: new Date(),
+    status: 'Registered'
+  }))
 }
 
 export async function registerForEvent(eventId: string, studentId: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await addDoc(collection(db, REG_COL), {
-      eventId,
-      studentId,
-      status: 'registered',
-      registeredAt: serverTimestamp(),
-    })
-    const evRef = doc(db, COL, eventId)
-    const evSnap = await getDoc(evRef)
-    if (evSnap.exists()) {
-      const current = evSnap.data().registeredCount || 0
-      await updateDoc(evRef, { registeredCount: current + 1 })
-    }
-    return
-  }
-  const registered = getLocalRegistrations()
-  if (!registered.includes(eventId)) {
-    registered.push(eventId)
-    saveLocalRegistrations(registered)
-
-    const all = getLocalStore()
-    const ev = all.find(e => e.id === eventId)
-    if (ev) {
-      ev.registeredCount = (ev.registeredCount || 0) + 1
-      if (ev.registeredCount >= ev.maxParticipants) {
-        ev.status = EventStatus.CLOSED
-      } else if (ev.registeredCount >= ev.maxParticipants * 0.9) {
-        ev.status = EventStatus.ALMOST_FULL
-      }
-      saveLocalStore(all)
-    }
-  }
+  await apiRequest(`/api/student/events/${eventId}/register`, { method: 'POST' })
 }
 
-export async function getRegistrations(studentId: string): Promise<string[]> {
-  if (isFirebaseConfigured && db) {
-    const q = query(collection(db, REG_COL), where('studentId', '==', studentId))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => d.data().eventId as string)
-  }
-  return getLocalRegistrations()
+export async function cancelRegistration(eventId: string, studentId: string): Promise<void> {
+  await apiRequest(`/api/student/events/${eventId}/cancel`, { method: 'POST' })
+}
+
+export async function createEvent(data: any): Promise<string> {
+  const res = await apiRequest<any>('/api/admin/events', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: data.title,
+      description: data.description,
+      date: typeof data.date === 'string' ? data.date : data.date.toISOString().split('T')[0],
+      time: data.time,
+      venue: data.venue,
+      meetingLink: data.meetingLink,
+      maxParticipants: data.maxCapacity || data.maxParticipants,
+      organizer: data.organizer,
+      bannerUrl: data.bannerURL || data.imageURL,
+      registrationDeadline: data.registrationDeadline ? (typeof data.registrationDeadline === 'string' ? data.registrationDeadline : data.registrationDeadline.toISOString()) : undefined
+    })
+  })
+  return res.id
+}
+
+export async function updateEvent(id: string, data: any): Promise<void> {
+  await apiRequest(`/api/admin/events/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function deleteEvent(id: string): Promise<void> {
+  await apiRequest(`/api/admin/events/${id}`, { method: 'DELETE' })
+}
+
+export function generateEventICS(event: Event): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const d = new Date(event.date)
+  const dt = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T160000Z`
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//CampusConnect//Events//EN',
+    'BEGIN:VEVENT',
+    `SUMMARY:${event.title}`,
+    `DESCRIPTION:${event.description}`,
+    `LOCATION:${event.venue}`,
+    `DTSTART:${dt}`,
+    `DTEND:${dt}`,
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n')
 }

@@ -10,7 +10,7 @@ export function useResources(category?: string) {
   useEffect(() => {
     getResources(category)
       .then(setResources)
-      .catch(e => setError(e.message))
+      .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false))
   }, [category])
 

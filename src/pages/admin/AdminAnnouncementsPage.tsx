@@ -138,7 +138,7 @@ export default function AdminAnnouncementsPage() {
                 <div className="flex items-center gap-3 text-xs text-slate-400 pt-1">
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    Published: {format(new Date(a.publishedAt), 'dd MMM yyyy, p')}
+                    Published: {format(new Date(a.publishedAt || a.createdAt || Date.now()), 'dd MMM yyyy, p')}
                   </span>
                   {a.attachmentURL && (
                     <span className="flex items-center gap-1 text-blue-500">
