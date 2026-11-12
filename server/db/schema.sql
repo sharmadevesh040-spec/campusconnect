@@ -173,6 +173,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Email Tokens Table (SMTP Authentication & Verification)
+CREATE TABLE IF NOT EXISTS email_tokens (
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    email VARCHAR(255) NOT NULL,
+    token VARCHAR(100) NOT NULL,
+    type VARCHAR(50) NOT NULL, -- 'verification', 'password_reset', 'login_otp'
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_profiles_student_id ON profiles(student_id);
@@ -183,4 +194,5 @@ CREATE INDEX IF NOT EXISTS idx_tasks_student_status ON tasks(student_id, status)
 CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_event_reg_student ON event_registrations(student_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_email_tokens_lookup ON email_tokens(email, token, type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(created_at DESC);

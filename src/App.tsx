@@ -26,7 +26,6 @@ import ResourcesPage from '@/pages/student/ResourcesPage'
 import CalendarPage from '@/pages/student/CalendarPage'
 import ProfilePage from '@/pages/student/ProfilePage'
 import NotificationsPage from '@/pages/student/NotificationsPage'
-import AIAssistantPage from '@/pages/student/AIAssistantPage'
 
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
 import AdminAnalyticsPage from '@/pages/admin/AdminAnalyticsPage'
@@ -130,9 +129,6 @@ export default function App() {
 
         <Route path="/student/notifications" element={<NotificationsPage />} />
         <Route path="/notifications" element={<Navigate to="/student/notifications" replace />} />
-
-        <Route path="/student/assistant" element={<AIAssistantPage />} />
-        <Route path="/assistant" element={<Navigate to="/student/assistant" replace />} />
       </Route>
 
       {/* Admin Panel Routes */}

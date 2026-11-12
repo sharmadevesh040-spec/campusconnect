@@ -30,8 +30,8 @@ export default function RegisterPage() {
   const onSubmit = async (data: FormData) => {
     try {
       await registerAuth(data.email, data.password, data.fullName)
-      toast.success('Account created!', { description: 'Welcome to CampusConnect. Complete your profile to get started.' })
-      navigate('/dashboard')
+      toast.success('Account created!', { description: 'A 6-digit confirmation code was dispatched via SMTP.' })
+      navigate(`/verify-email?email=${encodeURIComponent(data.email)}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed'
       toast.error('Registration failed', { description: msg.includes('email-already-in-use') ? 'An account with this email already exists.' : msg })

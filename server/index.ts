@@ -8,7 +8,6 @@ import authRoutes from './routes/auth'
 import studentRoutes from './routes/student'
 import adminRoutes from './routes/admin'
 import publicRoutes from './routes/public'
-import aiRoutes from './routes/ai'
 
 dotenv.config()
 
@@ -32,7 +31,6 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/student', studentRoutes)
 app.use('/api/admin', adminRoutes)
-app.use('/api/ai', aiRoutes)
 app.use('/api', publicRoutes)
 
 // Error Handler

@@ -246,22 +246,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* AI Assistant CTA */}
-      <Link to="/assistant">
-        <Card hover className="p-5 bg-gradient-to-r from-indigo-50/70 to-purple-50/70 dark:from-indigo-950/30 dark:to-purple-950/30 border-indigo-100 dark:border-indigo-800/40">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-md flex-shrink-0">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-slate-900 dark:text-slate-100">AI Student Assistant & Interview Coach</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Practice STAR responses, review program requirements, and get interview tips</p>
-            </div>
-            <ArrowRight className="w-5 h-5 text-indigo-500 flex-shrink-0" />
-          </div>
-        </Card>
-      </Link>
     </div>
   )
 }

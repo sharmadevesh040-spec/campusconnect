@@ -147,18 +147,18 @@ export default function InterviewDetailPage() {
         </Card>
       )}
 
-      {/* AI Prep Link */}
-      <Link to="/assistant">
-        <Card hover className="p-5 bg-gradient-to-r from-indigo-50/70 to-purple-50/70 dark:from-indigo-950/30 dark:to-purple-950/30 border-indigo-100 dark:border-indigo-800/40">
+      {/* Prep Guide Link */}
+      <Link to="/student/interview-prep">
+        <Card hover className="p-5 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-100 dark:border-blue-800/40">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-md flex-shrink-0">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-md flex-shrink-0">
               <Sparkles className="w-6 h-6 text-white" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Prepare for this Interview</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Use AI to generate mock questions, STAR format responses, and communication tips</p>
+              <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Review Interview Preparation Guide</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Explore the STAR method framework, sample answers, and program checklist</p>
             </div>
-            <Button variant="outline" size="sm" leftIcon={<Sparkles className="w-3 h-3 text-indigo-500" />}>Prepare</Button>
+            <Button variant="outline" size="sm" leftIcon={<Sparkles className="w-3 h-3 text-blue-500" />}>View Guide</Button>
           </div>
         </Card>
       </Link>

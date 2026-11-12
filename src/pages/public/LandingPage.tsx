@@ -128,9 +128,9 @@ export default function LandingPage() {
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Sparkles className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold">AI Student Assistant</h3>
+            <h3 className="text-base font-bold">Interview Preparation Guide</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              Interactive mock interview simulator, STAR behavioral answer coaching, customized study plans, and instant program FAQ guidance.
+              Curated STAR behavioral frameworks, ambassador evaluation rubrics, practice questions, and interview day checklists.
             </p>
           </Card>
 
