@@ -20,7 +20,7 @@ type PasswordFormData = z.infer<typeof passwordSchema>
 export default function LoginPage() {
   const [authMode, setAuthMode] = useState<'password' | 'otp'>('password')
   const [showPass, setShowPass] = useState(false)
-  const { login, googleSignIn } = useAuth()
+  const { login } = useAuth()
   const navigate = useNavigate()
 
   // Password form state
@@ -110,16 +110,6 @@ export default function LoginPage() {
       toast.error('Passcode verification failed', { description: err.message })
     } finally {
       setOtpVerifying(false)
-    }
-  }
-
-  const handleGoogle = async () => {
-    try {
-      await googleSignIn()
-      navigate('/student/dashboard')
-      toast.success('Signed in with Google!')
-    } catch {
-      toast.error('Google sign-in failed. Please try again.')
     }
   }
 

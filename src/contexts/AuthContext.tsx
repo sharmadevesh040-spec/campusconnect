@@ -12,7 +12,6 @@ interface AuthContextType {
   register: (email: string, password: string, name: string, studentData?: any) => Promise<void>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
-  googleSignIn: () => Promise<void>
   updateUserProfile: (data: Partial<Profile>) => Promise<void>
 }
 
@@ -150,30 +149,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const googleSignIn = async () => {
-    const res = await apiRequest<{ token: string; user: any }>('/api/auth/google', {
-      method: 'POST',
-      body: JSON.stringify({ email: 'alex@campusconnect.edu', name: 'Alex Chen' })
-    })
-
-    if (res.token && res.user) {
-      setToken(res.token)
-      const u = res.user
-      const prof = mapProfile(u)
-
-      setCurrentUser({
-        uid: u.id,
-        email: u.email,
-        displayName: prof.fullName,
-        photoURL: prof.photoURL
-      })
-      setUserProfile(prof)
-      setRole(prof.role || UserRole.STUDENT)
-    } else {
-      throw new Error('Google Sign-In failed')
-    }
-  }
-
   const logout = async () => {
     clearToken()
     setCurrentUser(null)
@@ -209,7 +184,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         resetPassword,
-        googleSignIn,
         updateUserProfile
       }}
     >
