@@ -45,11 +45,24 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 }
 
+export const AUTHORIZED_ADMIN_EMAIL = 'sharmadevesh040@gmail.com'
+
 export function requireRole(...roles: ('student' | 'admin' | 'super_admin')[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Unauthorized' })
       return
+    }
+
+    const isAdminRoute = roles.includes('admin') || roles.includes('super_admin')
+    if (isAdminRoute) {
+      const email = req.user.email?.toLowerCase().trim()
+      if (email !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        res.status(403).json({
+          error: `Access Denied: Only the authorized administrator (${AUTHORIZED_ADMIN_EMAIL}) can access the admin portal.`
+        })
+        return
+      }
     }
 
     if (roles.includes(req.user.role)) {

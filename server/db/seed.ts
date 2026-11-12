@@ -34,10 +34,33 @@ export async function seedDatabase() {
       }
     },
     {
+      id: 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61',
+      email: 'sharmadevesh040@gmail.com',
+      password_hash: superPass,
+      role: 'super_admin',
+      is_verified: true,
+      profile: {
+        full_name: 'DEVESH SHARMA',
+        student_id: 'GSA-2026-999',
+        phone: '+91 98765 43210',
+        university: 'Delhi Technological University',
+        college: 'School of Engineering',
+        course: 'B.Tech',
+        branch: 'Computer Science',
+        year: 1,
+        semester: 1,
+        skills: ['Student Ambassador', 'Leadership', 'System Administrator'],
+        bio: 'Designated Sole Super Administrator of CampusConnect.',
+        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA',
+        completion_pct: 100,
+        is_active: true
+      }
+    },
+    {
       id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
       email: 'admin@campusconnect.edu',
       password_hash: adminPass,
-      role: 'admin',
+      role: 'student',
       is_verified: true,
       profile: {
         full_name: 'Dr. Sarah Jenkins',
@@ -50,7 +73,7 @@ export async function seedDatabase() {
         year: 0,
         semester: 0,
         skills: ['Mentorship', 'Program Management', 'Interview Coordination'],
-        bio: 'Regional Student Ambassador Program Director.',
+        bio: 'Regional Student Ambassador Program Mentor.',
         avatar_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
         completion_pct: 100,
         is_active: true
@@ -60,7 +83,7 @@ export async function seedDatabase() {
       id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
       email: 'superadmin@campusconnect.edu',
       password_hash: superPass,
-      role: 'super_admin',
+      role: 'student',
       is_verified: true,
       profile: {
         full_name: 'Prof. Michael Vance',
@@ -73,7 +96,7 @@ export async function seedDatabase() {
         year: 0,
         semester: 0,
         skills: ['Executive Oversight', 'System Security', 'Auditing'],
-        bio: 'Super Administrator with system-wide privileges.',
+        bio: 'Advisor with student status.',
         avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80',
         completion_pct: 100,
         is_active: true
@@ -244,6 +267,10 @@ export async function seedDatabase() {
         ]
       )
     }
+
+    // Enforce sharmadevesh040@gmail.com as the exclusive Super Admin
+    await query(`UPDATE users SET role = 'super_admin' WHERE LOWER(email) = 'sharmadevesh040@gmail.com'`)
+    await query(`UPDATE users SET role = 'student' WHERE LOWER(email) != 'sharmadevesh040@gmail.com' AND role IN ('admin', 'super_admin')`)
 
     for (const item of defaultInterviews) {
       await query(

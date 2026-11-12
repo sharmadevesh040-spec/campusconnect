@@ -29,18 +29,10 @@ export default function AdminAdminsPage() {
       setAdmins([
         {
           id: 'adm-001',
-          name: 'Dr. Sarah Jenkins',
-          email: 'admin@campusconnect.edu',
-          role: 'admin',
-          college: 'Student Affairs',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'sadm-001',
-          name: 'Prof. Michael Vance',
-          email: 'superadmin@campusconnect.edu',
+          name: 'DEVESH SHARMA',
+          email: 'sharmadevesh040@gmail.com',
           role: 'super_admin',
-          college: 'Executive Office',
+          college: 'School of Engineering',
           createdAt: new Date().toISOString()
         }
       ])

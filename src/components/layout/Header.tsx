@@ -1,9 +1,10 @@
-import { Menu, Search, Bell } from 'lucide-react'
+import { Menu, Search, Bell, Shield } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { ThemeToggle } from '@/components/common/ThemeToggle'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/useNotifications'
+import { UserRole } from '@/types/user'
 import { cn } from '@/lib/utils'
 
 interface HeaderProps {
@@ -12,8 +13,11 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick, onSearchClick }: HeaderProps) {
-  const { userProfile } = useAuth()
+  const { currentUser, userProfile } = useAuth()
   const { unreadCount } = useNotifications()
+
+  const isDesignatedAdmin = (userProfile?.email || currentUser?.email)?.toLowerCase().trim() === 'sharmadevesh040@gmail.com' &&
+    (userProfile?.role === UserRole.ADMIN || userProfile?.role === UserRole.SUPER_ADMIN)
 
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-700/60 px-4 md:px-6 py-3 flex items-center gap-3">
@@ -33,7 +37,20 @@ export function Header({ onMenuClick, onSearchClick }: HeaderProps) {
         <kbd className="hidden md:inline-flex ml-auto h-5 items-center rounded border border-slate-300 dark:border-slate-500 px-1.5 text-[10px] text-slate-400">⌘K</kbd>
       </button>
 
-      <div className="flex items-center gap-1 ml-auto">
+      <div className="flex items-center gap-2 ml-auto">
+        {/* Admin Shortcut for Designated Admin */}
+        {isDesignatedAdmin && (
+          <Link to="/admin/dashboard">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs shadow-sm transition-all shadow-purple-500/20"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Admin Portal</span>
+            </button>
+          </Link>
+        )}
+
         <ThemeToggle />
 
         {/* Notifications */}

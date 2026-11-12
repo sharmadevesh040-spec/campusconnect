@@ -45,13 +45,24 @@ import LandingPage from '@/pages/public/LandingPage'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { UserRole } from '@/types/user'
 
+export const AUTHORIZED_ADMIN_EMAIL = 'sharmadevesh040@gmail.com'
+
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: UserRole }) {
   const { currentUser, userProfile, loading } = useAuth()
   if (loading) return <LoadingSpinner fullScreen />
   if (!currentUser) return <Navigate to="/login" replace />
-  if (role && userProfile?.role !== role && userProfile?.role !== UserRole.SUPER_ADMIN) {
+
+  // Strict check: Only AUTHORIZED_ADMIN_EMAIL can access admin portal routes
+  if (role === UserRole.ADMIN) {
+    const email = (userProfile?.email || currentUser?.email)?.toLowerCase().trim()
+    const isAdminRole = userProfile?.role === UserRole.ADMIN || userProfile?.role === UserRole.SUPER_ADMIN
+    if (email !== AUTHORIZED_ADMIN_EMAIL.toLowerCase() || !isAdminRole) {
+      return <Navigate to="/student/dashboard" replace />
+    }
+  } else if (role && userProfile?.role !== role && userProfile?.role !== UserRole.SUPER_ADMIN) {
     return <Navigate to="/student/dashboard" replace />
   }
+
   return <>{children}</>
 }
 

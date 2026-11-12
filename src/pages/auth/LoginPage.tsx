@@ -141,13 +141,13 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => handleFillCredentials('admin@campusconnect.edu', 'admin123')}
-            className="flex items-center gap-1.5 p-2 rounded-lg text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-purple-500 transition-colors text-xs"
+            onClick={() => handleFillCredentials('sharmadevesh040@gmail.com', 'devesh@09')}
+            className="flex items-center gap-1.5 p-2 rounded-lg text-left bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800/60 hover:border-purple-500 transition-colors text-xs"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
             <div className="truncate">
-              <span className="font-semibold block text-slate-800 dark:text-slate-200">Admin</span>
-              <span className="text-[10px] text-slate-400">admin@campusconnect.edu</span>
+              <span className="font-semibold block text-slate-800 dark:text-slate-200">Super Admin</span>
+              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono">sharmadevesh040@gmail.com</span>
             </div>
           </button>
         </div>
