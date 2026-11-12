@@ -61,10 +61,13 @@ export default function VerifyEmailPage() {
 
     setResending(true)
     try {
-      const res = await apiRequest<{ message: string }>('/api/auth/resend-verification', {
+      const res = await apiRequest<{ message: string; code?: string }>('/api/auth/resend-verification', {
         method: 'POST',
         body: JSON.stringify({ email: email.trim() })
       })
+      if (res.code) {
+        setCode(res.code)
+      }
       toast.success(res.message || 'Verification code resent via SMTP!')
     } catch (err: any) {
       toast.error('Failed to resend code', { description: err.message })

@@ -29,9 +29,14 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await registerAuth(data.email, data.password, data.fullName)
-      toast.success('Account created!', { description: 'A 6-digit confirmation code was dispatched via SMTP.' })
-      navigate(`/verify-email?email=${encodeURIComponent(data.email)}`)
+      const res: any = await registerAuth(data.email, data.password, data.fullName)
+      const codeParam = res?.verificationCode ? `&code=${encodeURIComponent(res.verificationCode)}` : ''
+      toast.success('Account created!', {
+        description: res?.verificationCode
+          ? `Your 6-digit verification code is: ${res.verificationCode}`
+          : 'A 6-digit confirmation code was dispatched via SMTP.'
+      })
+      navigate(`/verify-email?email=${encodeURIComponent(data.email)}${codeParam}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed'
       toast.error('Registration failed', { description: msg.includes('email-already-in-use') || msg.includes('already exists') ? 'An account with this email already exists.' : msg })

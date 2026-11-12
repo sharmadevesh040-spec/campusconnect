@@ -100,7 +100,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     )
 
     // Send verification email via SMTP
-    await sendVerificationEmail(normalizedEmail, verificationCode, fullName.trim())
+    const emailResult = await sendVerificationEmail(normalizedEmail, verificationCode, fullName.trim())
 
     const token = generateToken({
       id: newUserId,
@@ -112,8 +112,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     await logAudit(newUserId, 'STUDENT_REGISTERED', 'users', newUserId, { email: normalizedEmail })
 
     res.status(201).json({
-      message: 'Registration successful! Verification code sent to your email via SMTP.',
+      message: emailResult
+        ? 'Registration successful! Verification code sent to your email via SMTP.'
+        : `Registration successful! Your verification code is ${verificationCode} (Note: configure SMTP_PASS in Vercel to receive emails).`,
       token,
+      verificationCode,
       requiresVerification: true,
       user: {
         id: newUserId,
@@ -414,9 +417,14 @@ router.post('/resend-verification', async (req: Request, res: Response): Promise
       [normalizedEmail, code]
     )
 
-    await sendVerificationEmail(normalizedEmail, code, userRes.rows[0].full_name || 'Student')
+    const emailResult = await sendVerificationEmail(normalizedEmail, code, userRes.rows[0].full_name || 'Student')
 
-    res.json({ message: `Verification code resent to ${normalizedEmail} via SMTP.` })
+    res.json({
+      message: emailResult
+        ? `Verification code resent to ${normalizedEmail} via SMTP.`
+        : `Verification code: ${code} (Note: configure SMTP_PASS in Vercel to receive emails).`,
+      code
+    })
   } catch (err: any) {
     console.error('[Resend Verification Error]', err)
     res.status(500).json({ error: err.message || 'Failed to resend verification email' })

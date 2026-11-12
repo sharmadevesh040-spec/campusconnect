@@ -9,7 +9,7 @@ interface AuthContextType {
   loading: boolean
   role: UserRole | null
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, name: string, studentData?: any) => Promise<void>
+  register: (email: string, password: string, name: string, studentData?: any) => Promise<any>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   updateUserProfile: (data: Partial<Profile>) => Promise<void>
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       confirmPassword: password
     }
 
-    const res = await apiRequest<{ token: string; user: any }>('/api/auth/register', {
+    const res = await apiRequest<{ token: string; user: any; verificationCode?: string }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload)
     })
@@ -144,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       setUserProfile(prof)
       setRole(UserRole.STUDENT)
+      return res
     } else {
       throw new Error('Registration failed')
     }

@@ -19,19 +19,52 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Request logger
-app.use((req, res, next) => {
+// Request logger & Vercel path normalizer
+app.use((req, _res, next) => {
+  const matched = req.headers['x-matched-path'] as string
+  if (matched && matched.startsWith('/api') && req.url !== matched) {
+    req.url = matched
+  }
   if (!req.path.startsWith('/api/health')) {
     console.log(`[API] ${req.method} ${req.path}`)
   }
   next()
 })
 
-// Mount API Routes
+// Ensure DB migrations & seed run before handling any request (critical for Vercel serverless cold starts)
+let initPromise: Promise<void> | null = null
+
+async function ensureInitialized() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        await runMigration()
+        await seedDatabase()
+      } catch (err: any) {
+        console.warn('[Init Notice]:', err?.message || err)
+      }
+    })()
+  }
+  return initPromise
+}
+
+app.use(async (_req, _res, next) => {
+  await ensureInitialized()
+  next()
+})
+
+// Mount API Routes (both with and without /api prefix for Vercel rewrite compatibility)
 app.use('/api/auth', authRoutes)
+app.use('/auth', authRoutes)
+
 app.use('/api/student', studentRoutes)
+app.use('/student', studentRoutes)
+
 app.use('/api/admin', adminRoutes)
+app.use('/admin', adminRoutes)
+
 app.use('/api', publicRoutes)
+app.use('/', publicRoutes)
 
 // Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -42,8 +75,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // Auto-start server in local development
 async function start() {
   try {
-    await runMigration()
-    await seedDatabase()
+    await ensureInitialized()
 
     if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
       app.listen(PORT, () => {
