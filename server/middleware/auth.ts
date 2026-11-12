@@ -54,8 +54,9 @@ export function requireRole(...roles: ('student' | 'admin' | 'super_admin')[]) {
       return
     }
 
-    const isAdminRoute = roles.includes('admin') || roles.includes('super_admin')
-    if (isAdminRoute) {
+    // Pure admin routes do not allow 'student' role (e.g. /api/admin/*)
+    const isPureAdminRoute = !roles.includes('student') && (roles.includes('admin') || roles.includes('super_admin'))
+    if (isPureAdminRoute) {
       const email = req.user.email?.toLowerCase().trim()
       if (email !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
         res.status(403).json({

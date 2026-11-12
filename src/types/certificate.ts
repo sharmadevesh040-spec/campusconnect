@@ -1,7 +1,8 @@
 export enum CertificateStatus {
   ACTIVE = 'active',
-  REVOKED = 'revoked',
-  EXPIRED = 'expired'
+  VALID = 'Valid',
+  REVOKED = 'Revoked',
+  EXPIRED = 'Expired'
 }
 
 export interface Certificate {
@@ -9,6 +10,11 @@ export interface Certificate {
   certificateId: string
   studentId: string
   studentName: string
+  title?: string
+  type?: string
+  studentEmail?: string
+  studentCode?: string
+  studentUniversity?: string
   programName: string
   issueDate: Date
   expiryDate?: Date
@@ -17,7 +23,8 @@ export interface Certificate {
   status: CertificateStatus
   verificationURL: string
   issuedBy: string
-  description: string
+  description?: string
+  fileKey?: string
   createdAt: Date
   updatedAt: Date
 }

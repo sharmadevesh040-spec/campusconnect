@@ -1,3 +1,10 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import {
+  CalendarDays, CheckSquare, Award, Bell, Clock, MapPin, Video,
+  ChevronRight, Mic2, Eye, Download, ShieldCheck
+} from 'lucide-react'
+import { format, isToday, isTomorrow } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useInterviews } from '@/hooks/useInterviews'
 import { useTasks } from '@/hooks/useTasks'
@@ -7,18 +14,15 @@ import { useAnnouncements } from '@/hooks/useAnnouncements'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonCard } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
 import { CountdownTimer } from '@/components/common/CountdownTimer'
-import { Link } from 'react-router-dom'
-import {
-  Calendar, Mic2, CheckSquare, Award, Bell, ArrowRight,
-  MapPin, Video, CalendarDays, Clock, ChevronRight, Sparkles
-} from 'lucide-react'
-import { format, isToday, isTomorrow } from 'date-fns'
 import { InterviewStatus } from '@/types/interview'
 import { TaskStatus } from '@/types/task'
 import { EventStatus } from '@/types/event'
+import { getCertificateViewBlobUrl } from '@/services/certificateService'
+import { toast } from 'sonner'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -38,8 +42,12 @@ export default function DashboardPage() {
   const { interviews, loading: iLoading } = useInterviews()
   const { tasks, loading: tLoading } = useTasks()
   const { events, loading: eLoading } = useEvents()
-  const { certificates, loading: cLoading } = useCertificates()
+  const { certificates, loading: cLoading, downloadCertificate } = useCertificates()
   const { announcements, loading: aLoading } = useAnnouncements()
+
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
+  const [previewCert, setPreviewCert] = useState<any | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
 
   const firstName = userProfile?.fullName?.split(' ')[0] || 'Student'
 
@@ -54,10 +62,7 @@ export default function DashboardPage() {
     e.status === EventStatus.OPEN || e.status === EventStatus.ALMOST_FULL
   ).sort((a, b) => a.date.getTime() - b.date.getTime())
 
-  const unreadAnnouncements = announcements.filter(a => !a.isRead)
-
   const nextInterview = upcomingInterviews[0]
-  const nextEvent = upcomingEvents[0]
 
   const stats = [
     { label: 'Upcoming Interviews', value: upcomingInterviews.length, icon: Mic2, color: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400', link: '/interviews' },
@@ -66,8 +71,36 @@ export default function DashboardPage() {
     { label: 'Certificates Available', value: certificates.length, icon: Award, color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400', link: '/certificates' },
   ]
 
+  const handleDownload = async (certId: string, name: string, title: string) => {
+    setDownloading(certId)
+    try {
+      toast.loading('Preparing certificate PDF...', { id: 'download' })
+      await downloadCertificate(certId, name, title)
+      toast.success('Certificate ready ✓', {
+        id: 'download',
+        description: 'Your verified PDF certificate was downloaded successfully.'
+      })
+    } catch {
+      toast.error('Download failed. Please try again.', { id: 'download' })
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  const handleView = async (cert: any) => {
+    try {
+      toast.loading('Loading verified certificate...', { id: 'preview' })
+      const url = await getCertificateViewBlobUrl(cert.id)
+      toast.dismiss('preview')
+      setPreviewBlobUrl(url)
+      setPreviewCert(cert)
+    } catch {
+      toast.error('Unable to view certificate. Please try again.', { id: 'preview' })
+    }
+  }
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
       {/* Greeting */}
       <div className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-500/10">
         <p className="text-blue-100 text-sm font-medium mb-1">{format(new Date(), 'EEEE, dd MMMM yyyy')}</p>
@@ -98,6 +131,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Primary Grid */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Next Interview */}
         <div>
@@ -174,7 +208,90 @@ export default function DashboardPage() {
             </Card>
           )}
         </div>
+      </div>
 
+      {/* Dedicated My Certificates Section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Award className="w-4 h-4 text-emerald-500" />
+            My Certificates
+          </h2>
+          <Link to="/certificates" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1">
+            View all ({certificates.length}) <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        {cLoading ? (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {[1, 2].map(i => <SkeletonCard key={i} />)}
+          </div>
+        ) : certificates.length === 0 ? (
+          <Card className="p-6">
+            <EmptyState
+              emoji="🏆"
+              title="No certificates yet"
+              description="Your verified certificates will appear here once issued by your program administrator."
+            />
+          </Card>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {certificates.slice(0, 2).map(cert => (
+              <Card key={cert.id} className="p-4 flex flex-col justify-between border border-slate-200 dark:border-slate-800">
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100 line-clamp-1">
+                          {cert.title || cert.programName}
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          {cert.type || 'Ambassador Credential'}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="green" className="text-[10px]">
+                      {cert.status}
+                    </Badge>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs text-slate-500 mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span>Issued: {format(new Date(cert.issueDate), 'dd MMM yyyy')}</span>
+                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{cert.certificateId}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-3 mt-2 border-t border-slate-100 dark:border-slate-800">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-xs"
+                    leftIcon={<Eye className="w-3.5 h-3.5" />}
+                    onClick={() => handleView(cert)}
+                  >
+                    View Certificate
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 text-xs"
+                    leftIcon={<Download className="w-3.5 h-3.5" />}
+                    loading={downloading === cert.id}
+                    onClick={() => handleDownload(cert.id, cert.studentName, cert.title || cert.programName)}
+                  >
+                    Download PDF
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Events & Announcements Grid */}
+      <div className="grid md:grid-cols-2 gap-6">
         {/* Upcoming Events */}
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -246,6 +363,54 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* PDF View Modal on Dashboard */}
+      {previewBlobUrl && (
+        <Modal
+          isOpen={Boolean(previewBlobUrl)}
+          onClose={() => {
+            URL.revokeObjectURL(previewBlobUrl)
+            setPreviewBlobUrl(null)
+          }}
+          title={previewCert?.title || previewCert?.programName || 'Certificate Preview'}
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="w-full h-[520px] border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-100">
+              <iframe src={previewBlobUrl} className="w-full h-full" title="Certificate PDF Viewer" />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-xs text-slate-500">
+                Certificate ID: <span className="font-mono font-bold text-blue-600">{previewCert?.certificateId}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  leftIcon={<Download className="w-4 h-4" />}
+                  onClick={() => {
+                    if (previewCert) {
+                      handleDownload(previewCert.id, previewCert.studentName, previewCert.title || previewCert.programName)
+                    }
+                  }}
+                >
+                  Download PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    URL.revokeObjectURL(previewBlobUrl)
+                    setPreviewBlobUrl(null)
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

@@ -8,25 +8,23 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
-import { CertificateStatus } from '@/types/certificate'
+import { getCertificateViewBlobUrl } from '@/services/certificateService'
 import { toast } from 'sonner'
 
 export default function CertificatesPage() {
   const { certificates, loading, downloadCertificate } = useCertificates()
   const [downloading, setDownloading] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
+  const [previewCert, setPreviewCert] = useState<any | null>(null)
 
-  const handleDownload = async (certId: string, name: string, program: string) => {
+  const handleDownload = async (certId: string, name: string, title: string) => {
     setDownloading(certId)
     try {
-      toast.loading('Preparing certificate...', { id: 'download' })
-      await new Promise(r => setTimeout(r, 600)) // UX feedback step
-      toast.loading('Generating secure download...', { id: 'download' })
-      await new Promise(r => setTimeout(r, 500))
-      await downloadCertificate(certId)
+      toast.loading('Preparing certificate PDF...', { id: 'download' })
+      await downloadCertificate(certId, name, title)
       toast.success('Certificate ready ✓', {
         id: 'download',
-        description: `${name.replace(/\s+/g, '')}_${program.replace(/\s+/g, '_')}_Certificate.svg downloaded`
+        description: 'Your verified PDF certificate was downloaded successfully.'
       })
     } catch {
       toast.error('Download failed. Please try again.', { id: 'download' })
@@ -35,11 +33,27 @@ export default function CertificatesPage() {
     }
   }
 
-  const handleShare = async (cert: { certificateId: string; programName: string }) => {
+  const handleView = async (cert: any) => {
+    try {
+      toast.loading('Loading verified certificate...', { id: 'preview' })
+      const url = await getCertificateViewBlobUrl(cert.id)
+      toast.dismiss('preview')
+      setPreviewBlobUrl(url)
+      setPreviewCert(cert)
+    } catch {
+      toast.error('Unable to view certificate. Please try again.', { id: 'preview' })
+    }
+  }
+
+  const handleShare = async (cert: { certificateId: string; programName: string; title?: string }) => {
     const url = `${window.location.origin}/verify/${cert.certificateId}`
     if (navigator.share) {
       try {
-        await navigator.share({ title: cert.programName, text: `Verify my certificate: ${cert.certificateId}`, url })
+        await navigator.share({
+          title: cert.title || cert.programName,
+          text: `Verify my certificate on CampusConnect: ${cert.certificateId}`,
+          url
+        })
       } catch {
         // user cancelled
       }
@@ -49,27 +63,32 @@ export default function CertificatesPage() {
     }
   }
 
-  const previewCert = preview ? certificates.find(c => c.id === preview) : null
-
   return (
-    <div className="max-w-3xl mx-auto space-y-5 animate-fade-in">
+    <div className="max-w-4xl mx-auto space-y-5 animate-fade-in pb-12">
       <div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">My Certificates</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{certificates.length} certificate{certificates.length !== 1 ? 's' : ''} available</p>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <Award className="w-5 h-5 text-emerald-500" />
+          My Certificates
+        </h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          {certificates.length} verified credential{certificates.length !== 1 ? 's' : ''} issued to your account.
+        </p>
       </div>
 
       {loading ? (
-        <div className="grid sm:grid-cols-2 gap-4">{[1,2].map(i => <SkeletonCard key={i} />)}</div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {[1, 2].map(i => <SkeletonCard key={i} />)}
+        </div>
       ) : certificates.length === 0 ? (
         <EmptyState
           emoji="🏆"
           title="No certificates yet"
-          description="Your certificates will appear here once issued by your student program administrator."
+          description="Your verified certificates will appear here once issued by your student program administrator."
         />
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
           {certificates.map(cert => (
-            <Card key={cert.id} className="overflow-hidden flex flex-col justify-between">
+            <Card key={cert.id} className="overflow-hidden flex flex-col justify-between border border-slate-200 dark:border-slate-800">
               {/* Header ribbon */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-white">
                 <div className="flex items-center justify-between mb-3">
@@ -81,8 +100,12 @@ export default function CertificatesPage() {
                     {cert.status}
                   </Badge>
                 </div>
-                <p className="text-xs text-blue-100 font-medium uppercase tracking-wider mb-1">Certificate of Participation</p>
-                <h3 className="text-base font-bold leading-tight">{cert.programName}</h3>
+                <p className="text-xs text-blue-100 font-medium uppercase tracking-wider mb-1">
+                  {cert.type || 'Ambassador Credential'}
+                </p>
+                <h3 className="text-base font-bold leading-tight">
+                  {cert.title || cert.programName}
+                </h3>
               </div>
 
               {/* Certificate details */}
@@ -94,8 +117,10 @@ export default function CertificatesPage() {
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <div>
-                      <p className="text-slate-400">Issued</p>
-                      <p className="font-medium text-slate-700 dark:text-slate-300">{format(cert.issueDate, 'MMMM yyyy')}</p>
+                      <p className="text-slate-400">Issue Date</p>
+                      <p className="font-medium text-slate-700 dark:text-slate-300">
+                        {format(new Date(cert.issueDate), 'dd MMMM yyyy')}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-slate-400">Certificate ID</p>
@@ -112,7 +137,7 @@ export default function CertificatesPage() {
                       size="sm"
                       className="flex-1"
                       leftIcon={<Eye className="w-3.5 h-3.5" />}
-                      onClick={() => setPreview(cert.id)}
+                      onClick={() => handleView(cert)}
                     >
                       View Certificate
                     </Button>
@@ -121,11 +146,11 @@ export default function CertificatesPage() {
                       className="flex-1"
                       leftIcon={<Download className="w-3.5 h-3.5" />}
                       loading={downloading === cert.id}
-                      onClick={() => handleDownload(cert.id, cert.studentName, cert.programName)}
+                      onClick={() => handleDownload(cert.id, cert.studentName, cert.title || cert.programName)}
                     >
                       Download
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleShare(cert)} title="Share link" aria-label="Share">
+                    <Button variant="ghost" size="icon" onClick={() => handleShare(cert)} title="Share verification link" aria-label="Share">
                       <Share2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -148,48 +173,52 @@ export default function CertificatesPage() {
       )}
 
       {/* Preview Modal */}
-      <Modal isOpen={!!preview} onClose={() => setPreview(null)} title={previewCert?.programName || 'Certificate Preview'} size="lg">
-        {previewCert && (
+      {previewBlobUrl && (
+        <Modal
+          isOpen={Boolean(previewBlobUrl)}
+          onClose={() => {
+            URL.revokeObjectURL(previewBlobUrl)
+            setPreviewBlobUrl(null)
+          }}
+          title={previewCert?.title || previewCert?.programName || 'Certificate Preview'}
+          size="lg"
+        >
           <div className="space-y-4">
-            <div className="border border-slate-200 dark:border-slate-700 rounded-2xl p-6 bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-800 dark:to-blue-950/20 text-center relative overflow-hidden">
-              <div className="absolute top-2 right-2 opacity-10">
-                <Award className="w-48 h-48" />
-              </div>
-              <p className="text-xs font-bold text-blue-600 tracking-widest uppercase mb-1">CampusConnect Student Hub</p>
-              <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 mb-1">CERTIFICATE OF PARTICIPATION</h2>
-              <p className="text-xs text-slate-400 mb-4">Presented to</p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2 border-b border-slate-300 dark:border-slate-600 pb-1 inline-block px-8">{previewCert.studentName}</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 max-w-md mx-auto">{previewCert.description}</p>
-              
-              <div className="flex justify-between items-center text-xs text-slate-500 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <div>
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">{previewCert.issuedBy}</p>
-                  <p className="text-[10px] text-slate-400">Authorized Program Executive</p>
-                </div>
-                <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 font-mono font-bold text-blue-600">
-                  {previewCert.certificateId}
-                </div>
-              </div>
+            <div className="w-full h-[520px] border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-100">
+              <iframe src={previewBlobUrl} className="w-full h-full" title="Certificate PDF Viewer" />
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                className="flex-1"
-                leftIcon={<Download className="w-4 h-4" />}
-                loading={downloading === previewCert.id}
-                onClick={() => { handleDownload(previewCert.id, previewCert.studentName, previewCert.programName); setPreview(null) }}
-              >
-                Download Certificate
-              </Button>
-              <a href={`/verify/${previewCert.certificateId}`} target="_blank" rel="noopener noreferrer" className="flex-1">
-                <Button variant="outline" className="w-full" leftIcon={<QrCode className="w-4 h-4" />}>
-                  View Verification URL
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-xs text-slate-500">
+                Certificate ID: <span className="font-mono font-bold text-blue-600">{previewCert?.certificateId}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  leftIcon={<Download className="w-4 h-4" />}
+                  onClick={() => {
+                    if (previewCert) {
+                      handleDownload(previewCert.id, previewCert.studentName, previewCert.title || previewCert.programName)
+                    }
+                  }}
+                >
+                  Download PDF
                 </Button>
-              </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    URL.revokeObjectURL(previewBlobUrl)
+                    setPreviewBlobUrl(null)
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
             </div>
           </div>
-        )}
-      </Modal>
+        </Modal>
+      )}
     </div>
   )
 }

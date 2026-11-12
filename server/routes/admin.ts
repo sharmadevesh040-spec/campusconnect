@@ -1,4 +1,5 @@
 import { Router, Response } from 'express'
+import fs from 'fs'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import multer from 'multer'
@@ -6,7 +7,8 @@ import Papa from 'papaparse'
 import QRCode from 'qrcode'
 import { requireAuth, requireRole, AuthRequest, logAudit } from '../middleware/auth'
 import { query } from '../db'
-import { saveFile } from '../storage'
+import { saveFile, getFilePath } from '../storage'
+import { generateCertificatePdfBuffer } from '../storage/pdfGenerator'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage() })
@@ -368,37 +370,59 @@ router.delete('/interviews/:id', async (req: AuthRequest, res: Response): Promis
   }
 })
 
-// GET /api/admin/certificates
-router.get('/certificates', async (_req: AuthRequest, res: Response): Promise<void> => {
+// GET /api/admin/certificates (Search by student name, student ID, or certificate ID)
+router.get('/certificates', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const resSql = await query(`
-      SELECT c.*, p.full_name as "studentName", u.email as "studentEmail", p.student_id as "studentCode"
+    const q = ((req.query.q as string) || '').trim().toLowerCase()
+    let sql = `
+      SELECT c.*, 
+             COALESCE(c.title, c.certificate_name) as title,
+             COALESCE(c.type, 'Participation') as type,
+             p.full_name as "studentName", 
+             u.email as "studentEmail", 
+             p.student_id as "studentCode",
+             p.university as "studentUniversity"
       FROM certificates c
-      LEFT JOIN profiles p ON c.student_id = p.user_id
-      LEFT JOIN users u ON c.student_id = u.id
-      ORDER BY c.issue_date DESC
-    `)
+      LEFT JOIN profiles p ON (c.student_id = p.user_id OR c.student_id = p.student_id)
+      LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
+    `
+    const params: any[] = []
+    if (q) {
+      params.push(`%${q}%`)
+      sql += ` WHERE LOWER(COALESCE(p.full_name, '')) LIKE $1 
+               OR LOWER(COALESCE(p.student_id, '')) LIKE $1 
+               OR LOWER(c.certificate_id) LIKE $1 
+               OR LOWER(COALESCE(c.title, c.certificate_name, '')) LIKE $1 
+               OR LOWER(COALESCE(c.program, '')) LIKE $1
+               OR LOWER(COALESCE(u.email, '')) LIKE $1`
+    }
+    sql += ` ORDER BY c.issue_date DESC, c.created_at DESC`
+    const resSql = await query(sql, params)
     res.json(resSql.rows)
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
 })
 
-// POST /api/admin/certificates (Upload and issue certificate)
+// POST /api/admin/certificates (Upload PDF, store metadata & link to unique student ID)
 router.post('/certificates', upload.single('file'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { studentId, certificateName, program, issueDate } = req.body
-    if (!studentId || !certificateName || !program) {
-      res.status(400).json({ error: 'Student, Certificate Name, and Program are required' })
+    const { studentId, certificateName, title, program, type, issueDate, description } = req.body
+    const certTitle = (title || certificateName || '').trim()
+    const certProgram = (program || certTitle || 'Google Student Ambassador').trim()
+    const certType = (type || 'Participation').trim()
+
+    if (!studentId || !certTitle) {
+      res.status(400).json({ error: 'Student and Certificate Title are required' })
       return
     }
 
     const certCode = 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000)
     const verifyUrl = `${req.protocol}://${req.get('host')}/verify/${certCode}`
-    const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl)
+    const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { width: 300 })
 
     let fileKey = `certificates/${certCode}.pdf`
-    let fileUrl = `/api/certificates/${certCode}/download`
+    let fileUrl = `/api/student/certificates/${certCode}/download`
 
     if (req.file) {
       const stored = await saveFile(req.file.buffer, `${certCode}.pdf`, 'certificates')
@@ -410,7 +434,7 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
 
     // Resolve student user ID from UUID, student_id code, or email
     const stuLookup = await query(
-      `SELECT u.id, u.email, p.student_id, p.full_name
+      `SELECT u.id, u.email, p.student_id, p.full_name, p.university
        FROM users u
        LEFT JOIN profiles p ON u.id = p.user_id
        WHERE u.id::text = $1 OR p.student_id = $1 OR LOWER(u.email) = LOWER($1)
@@ -418,11 +442,25 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
       [studentId]
     )
     const resolvedStudentId = stuLookup.rows[0]?.id || studentId
+    const studentName = stuLookup.rows[0]?.full_name || 'Student Ambassador'
 
     await query(
-      `INSERT INTO certificates (id, certificate_id, student_id, certificate_name, program, issue_date, file_key, file_url, qr_code, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Valid')`,
-      [newId, certCode, resolvedStudentId, certificateName, program, issueDate || new Date().toISOString().split('T')[0], fileKey, fileUrl, qrCodeDataUrl]
+      `INSERT INTO certificates (id, certificate_id, student_id, title, certificate_name, type, program, issue_date, description, file_key, file_url, qr_code, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Valid')`,
+      [
+        newId,
+        certCode,
+        resolvedStudentId,
+        certTitle,
+        certTitle,
+        certType,
+        certProgram,
+        issueDate || new Date().toISOString().split('T')[0],
+        description || null,
+        fileKey,
+        fileUrl,
+        qrCodeDataUrl
+      ]
     )
 
     // Notify student
@@ -432,13 +470,200 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
       [
         resolvedStudentId,
         '🏆 New Certificate Issued!',
-        `Your verified certificate for "${certificateName}" is now available to download.`
+        `Your verified certificate for "${certTitle}" is now available to download.`
       ]
     )
 
-    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, { studentId: resolvedStudentId, certificateName })
+    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, { studentId: resolvedStudentId, title: certTitle, type: certType })
 
-    res.status(201).json({ id: newId, certificate_id: certCode, certificate_name: certificateName })
+    res.status(201).json({
+      id: newId,
+      certificate_id: certCode,
+      title: certTitle,
+      certificate_name: certTitle,
+      type: certType,
+      studentName,
+      status: 'Valid'
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PATCH /api/admin/certificates/:id (Edit certificate metadata)
+router.patch('/certificates/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { title, type, issueDate, description, status, program } = req.body
+
+    const resSql = await query(
+      `UPDATE certificates SET
+        title = COALESCE($1, title),
+        certificate_name = COALESCE($1, certificate_name),
+        type = COALESCE($2, type),
+        issue_date = COALESCE($3, issue_date),
+        description = COALESCE($4, description),
+        status = COALESCE($5, status),
+        program = COALESCE($6, program),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7 OR certificate_id = $7
+       RETURNING *`,
+      [title, type, issueDate, description, status, program, req.params.id]
+    )
+
+    if (resSql.rowCount === 0) {
+      res.status(404).json({ error: 'Certificate not found' })
+      return
+    }
+
+    await logAudit(req.user!.id, 'CERTIFICATE_UPDATED', 'certificates', req.params.id, req.body)
+    res.json(resSql.rows[0])
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/admin/certificates/:id/replace (Replace certificate PDF)
+router.put('/certificates/:id/replace', upload.single('file'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'New PDF file is required' })
+      return
+    }
+
+    const check = await query(`SELECT * FROM certificates WHERE id = $1 OR certificate_id = $1`, [req.params.id])
+    if (check.rows.length === 0) {
+      res.status(404).json({ error: 'Certificate not found' })
+      return
+    }
+
+    const cert = check.rows[0]
+    const stored = await saveFile(req.file.buffer, `${cert.certificate_id}.pdf`, 'certificates')
+
+    const updateRes = await query(
+      `UPDATE certificates SET
+        file_key = $1,
+        file_url = $2,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [stored.fileKey, stored.fileUrl, cert.id]
+    )
+
+    await logAudit(req.user!.id, 'CERTIFICATE_FILE_REPLACED', 'certificates', cert.certificate_id, { fileKey: stored.fileKey })
+    res.json(updateRes.rows[0])
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/admin/certificates/:id (Delete certificate record and file)
+router.delete('/certificates/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const check = await query(`SELECT * FROM certificates WHERE id = $1 OR certificate_id = $1`, [req.params.id])
+    if (check.rows.length === 0) {
+      res.status(404).json({ error: 'Certificate not found' })
+      return
+    }
+
+    const cert = check.rows[0]
+    if (cert.file_key) {
+      const physicalPath = getFilePath(cert.file_key)
+      if (physicalPath && fs.existsSync(physicalPath)) {
+        try { fs.unlinkSync(physicalPath) } catch (e) { /* ignore */ }
+      }
+    }
+
+    await query(`DELETE FROM certificates WHERE id = $1`, [cert.id])
+    await logAudit(req.user!.id, 'CERTIFICATE_DELETED', 'certificates', cert.certificate_id)
+    res.json({ message: 'Certificate deleted successfully' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/admin/certificates/:id/view (Admin view PDF)
+router.get('/certificates/:id/view', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const check = await query(
+      `SELECT c.*, p.full_name as "studentName", p.university as "studentUniversity" 
+       FROM certificates c 
+       LEFT JOIN profiles p ON (c.student_id = p.user_id OR c.student_id = p.student_id)
+       WHERE c.id = $1 OR certificate_id = $1`,
+      [req.params.id]
+    )
+    if (check.rows.length === 0) {
+      res.status(404).json({ error: 'Certificate not found' })
+      return
+    }
+    const cert = check.rows[0]
+    if (cert.file_key) {
+      const physicalPath = getFilePath(cert.file_key)
+      if (physicalPath && fs.existsSync(physicalPath)) {
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `inline; filename="${cert.certificate_id}.pdf"`)
+        fs.createReadStream(physicalPath).pipe(res)
+        return
+      }
+    }
+
+    const pdfBuffer = generateCertificatePdfBuffer({
+      studentName: cert.studentName,
+      title: cert.title || cert.certificate_name,
+      type: cert.type,
+      certificate_id: cert.certificate_id,
+      program: cert.program,
+      issue_date: cert.issue_date,
+      studentUniversity: cert.studentUniversity
+    })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="${cert.certificate_id}.pdf"`)
+    res.send(pdfBuffer)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/admin/certificates/:id/download (Admin download PDF)
+router.get('/certificates/:id/download', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const check = await query(
+      `SELECT c.*, p.full_name as "studentName", p.university as "studentUniversity" 
+       FROM certificates c 
+       LEFT JOIN profiles p ON (c.student_id = p.user_id OR c.student_id = p.student_id)
+       WHERE c.id = $1 OR certificate_id = $1`,
+      [req.params.id]
+    )
+    if (check.rows.length === 0) {
+      res.status(404).json({ error: 'Certificate not found' })
+      return
+    }
+    const cert = check.rows[0]
+    const studentNameClean = (cert.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '_')
+    const titleClean = (cert.title || cert.certificate_name || 'Certificate').replace(/[^a-zA-Z0-9]/g, '_')
+    const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`
+
+    if (cert.file_key) {
+      const physicalPath = getFilePath(cert.file_key)
+      if (physicalPath && fs.existsSync(physicalPath)) {
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+        fs.createReadStream(physicalPath).pipe(res)
+        return
+      }
+    }
+
+    const pdfBuffer = generateCertificatePdfBuffer({
+      studentName: cert.studentName,
+      title: cert.title || cert.certificate_name,
+      type: cert.type,
+      certificate_id: cert.certificate_id,
+      program: cert.program,
+      issue_date: cert.issue_date,
+      studentUniversity: cert.studentUniversity
+    })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(pdfBuffer)
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

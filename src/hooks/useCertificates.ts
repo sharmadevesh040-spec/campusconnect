@@ -26,8 +26,8 @@ export function useCertificates() {
     fetchCertificates()
   }, [fetchCertificates])
 
-  const downloadCertificate = async (certId: string) => {
-    await downloadCertService(certId)
+  const downloadCertificate = async (certId: string, studentName?: string, programName?: string) => {
+    await downloadCertService(certId, studentName, programName)
   }
 
   return { certificates, loading, error, downloadCertificate, refetch: fetchCertificates }

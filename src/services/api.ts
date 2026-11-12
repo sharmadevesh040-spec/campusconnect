@@ -78,3 +78,31 @@ export async function apiRequest<T = any>(
     throw new ApiError('Unable to connect to server. Check your connection or offline cache.', 0)
   }
 }
+
+export async function apiBlobRequest(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Blob> {
+  const token = getToken()
+  const headers = new Headers(options.headers || {})
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const url = `${BASE_URL}${endpoint}`
+  const res = await fetch(url, { ...options, headers })
+
+  if (!res.ok) {
+    let errMessage = 'Download failed'
+    try {
+      const errorData = await res.json()
+      errMessage = errorData.error || errorData.message || errMessage
+    } catch {
+      errMessage = res.statusText || errMessage
+    }
+    throw new ApiError(errMessage, res.status)
+  }
+
+  return await res.blob()
+}

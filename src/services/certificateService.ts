@@ -1,29 +1,40 @@
-import { apiRequest } from './api'
+import { apiRequest, apiBlobRequest } from './api'
 import type { Certificate } from '@/types'
 import { CertificateStatus } from '@/types/certificate'
 
 const CACHE_KEY = 'campusconnect_certificates_cache'
 
 function mapCert(item: any): Certificate {
+  const title = item.title || item.certificate_name || item.certificateName || 'Ambassador Credential'
+  const type = item.type || 'Participation'
   return {
     id: item.id,
     certificateId: item.certificate_id || item.certificateId,
     studentId: item.student_id || item.studentId,
     studentName: item.studentName || item.student_name || 'Student',
-    programName: item.program || item.programName || 'CampusConnect Ambassador',
+    title,
+    type,
+    studentEmail: item.studentEmail || item.student_email,
+    studentCode: item.studentCode || item.student_code,
+    studentUniversity: item.studentUniversity || item.student_university,
+    programName: item.program || item.programName || title,
     issueDate: new Date(item.issue_date || item.issueDate),
-    pdfURL: item.file_url || item.pdfURL || `/api/certificates/${item.certificate_id || item.id}/download`,
+    pdfURL: item.file_url || item.pdfURL || `/api/student/certificates/${item.certificate_id || item.id}/download`,
     thumbnailURL: item.qr_code || item.thumbnailURL || '',
-    status: (item.status as CertificateStatus) || CertificateStatus.ACTIVE,
+    status: (item.status as CertificateStatus) || CertificateStatus.VALID,
     verificationURL: `/verify/${item.certificate_id || item.certificateId}`,
     issuedBy: 'CampusConnect Executive Board',
-    description: 'Awarded for extraordinary community outreach, inclusive tech workshops, and student mentorship.',
+    description: item.description || 'Awarded for extraordinary community outreach, inclusive tech workshops, and student mentorship.',
+    fileKey: item.file_key,
     createdAt: new Date(item.created_at || Date.now()),
     updatedAt: new Date(item.updated_at || Date.now())
   }
 }
 
-export async function getCertificates(studentId?: string): Promise<Certificate[]> {
+/**
+ * Fetch authenticated student's own certificates (PostgreSQL)
+ */
+export async function getCertificates(_studentId?: string): Promise<Certificate[]> {
   try {
     const list = await apiRequest<any[]>('/api/student/certificates')
     const mapped = list.map(mapCert)
@@ -40,9 +51,13 @@ export async function getCertificatesByStudent(studentId: string): Promise<Certi
   return getCertificates(studentId)
 }
 
-export async function getAllCertificates(): Promise<Certificate[]> {
+/**
+ * Admin: Get all certificates with optional search filter query
+ */
+export async function getAllCertificates(search?: string): Promise<Certificate[]> {
   try {
-    const list = await apiRequest<any[]>('/api/admin/certificates')
+    const qParam = search ? `?q=${encodeURIComponent(search.trim())}` : ''
+    const list = await apiRequest<any[]>(`/api/admin/certificates${qParam}`)
     return list.map(mapCert)
   } catch {
     return []
@@ -59,6 +74,9 @@ export async function getCertificateByCertId(certId: string): Promise<Certificat
   return res.certificate
 }
 
+/**
+ * Public Verification Endpoint
+ */
 export async function verifyCertificate(certificateId: string): Promise<{
   verified: boolean
   certificate: Certificate | null
@@ -82,14 +100,16 @@ export async function verifyCertificate(certificateId: string): Promise<{
         certificateId: data.certificateId,
         studentId: data.studentCode,
         studentName: data.studentName,
+        title: data.title || data.certificateName,
+        type: data.type || 'Participation',
         programName: data.program,
         issueDate: new Date(data.issueDate),
-        pdfURL: `/api/certificates/${certificateId}/download`,
+        pdfURL: `/api/student/certificates/${certificateId}/download`,
         thumbnailURL: data.qrCode || '',
         status: data.status as CertificateStatus,
         verificationURL: `/verify/${data.certificateId}`,
         issuedBy: 'CampusConnect',
-        description: 'Verified Credential Record',
+        description: data.description || 'Verified Credential Record',
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -99,36 +119,56 @@ export async function verifyCertificate(certificateId: string): Promise<{
   }
 }
 
+/**
+ * Admin: Issue / Upload Certificate
+ */
 export async function createCertificate(data: {
-  certificateId: string
+  certificateId?: string
   studentId: string
-  studentName: string
-  programName: string
-  issueDate: Date
-  pdfURL: string
-  thumbnailURL: string
-  status: CertificateStatus
-  verificationURL: string
-  issuedBy: string
-  description: string
+  studentName?: string
+  title?: string
+  certificateName?: string
+  type?: string
+  programName?: string
+  program?: string
+  issueDate?: Date | string
+  pdfURL?: string
+  thumbnailURL?: string
+  status?: CertificateStatus | string
+  verificationURL?: string
+  issuedBy?: string
+  description?: string
   file?: File
 }): Promise<string> {
+  const title = data.title || data.certificateName || 'Google Student Ambassador Certificate'
+  const type = data.type || 'Participation'
+  const program = data.programName || data.program || title
+  const issueDateStr = data.issueDate
+    ? (data.issueDate instanceof Date ? data.issueDate.toISOString().split('T')[0] : data.issueDate)
+    : new Date().toISOString().split('T')[0]
+
   let body: any
 
   if (data.file) {
     const fd = new FormData()
     fd.append('file', data.file)
     fd.append('studentId', data.studentId)
-    fd.append('certificateName', data.programName + ' Certificate')
-    fd.append('program', data.programName)
-    fd.append('issueDate', data.issueDate.toISOString().split('T')[0])
+    fd.append('title', title)
+    fd.append('certificateName', title)
+    fd.append('type', type)
+    fd.append('program', program)
+    fd.append('issueDate', issueDateStr)
+    if (data.description) fd.append('description', data.description)
     body = fd
   } else {
     body = JSON.stringify({
       studentId: data.studentId,
-      certificateName: data.programName + ' Certificate',
-      program: data.programName,
-      issueDate: data.issueDate.toISOString().split('T')[0]
+      title,
+      certificateName: title,
+      type,
+      program,
+      issueDate: issueDateStr,
+      description: data.description
     })
   }
 
@@ -137,21 +177,84 @@ export async function createCertificate(data: {
     body
   })
   localStorage.removeItem(CACHE_KEY)
-  return res.id
+  return res.id || res.certificate_id
 }
 
+/**
+ * Admin: Edit Certificate Metadata
+ */
+export async function updateCertificate(
+  id: string,
+  data: {
+    title?: string
+    type?: string
+    program?: string
+    issueDate?: string
+    description?: string
+    status?: string
+  }
+): Promise<any> {
+  const res = await apiRequest(`/api/admin/certificates/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+  localStorage.removeItem(CACHE_KEY)
+  return res
+}
+
+/**
+ * Admin: Replace Certificate PDF File
+ */
+export async function replaceCertificatePdf(id: string, file: File): Promise<any> {
+  const fd = new FormData()
+  fd.append('file', file)
+  const res = await apiRequest(`/api/admin/certificates/${id}/replace`, {
+    method: 'PUT',
+    body: fd
+  })
+  localStorage.removeItem(CACHE_KEY)
+  return res
+}
+
+/**
+ * Admin: Delete Certificate
+ */
+export async function deleteCertificate(id: string): Promise<void> {
+  await apiRequest(`/api/admin/certificates/${id}`, { method: 'DELETE' })
+  localStorage.removeItem(CACHE_KEY)
+}
+
+/**
+ * Admin: Revoke Certificate
+ */
 export async function revokeCertificate(id: string): Promise<void> {
   await apiRequest(`/api/admin/certificates/${id}/revoke`, { method: 'PATCH' })
+  localStorage.removeItem(CACHE_KEY)
 }
 
+/**
+ * Securely fetch and preview certificate PDF blob
+ */
+export async function getCertificateViewBlobUrl(id: string): Promise<string> {
+  const blob = await apiBlobRequest(`/api/student/certificates/${id}/view`)
+  return URL.createObjectURL(blob)
+}
+
+/**
+ * Securely download certificate PDF via authenticated blob
+ */
 export async function downloadCertificate(id: string, studentName?: string, programName?: string): Promise<void> {
-  const url = `/api/certificates/${id}/download`
-  const sName = studentName || 'Student'
-  const pName = programName || 'Certificate'
+  const blob = await apiBlobRequest(`/api/student/certificates/${id}/download`)
+  const sName = (studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '_')
+  const pName = (programName || 'Certificate').replace(/[^a-zA-Z0-9]/g, '_')
+  const filename = `${sName}_${pName}_Certificate.pdf`
+
+  const blobUrl = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url
-  a.download = `${sName.replace(/[^a-zA-Z0-9]/g, '_')}_${pName.replace(/[^a-zA-Z0-9]/g, '_')}_Certificate.pdf`
+  a.href = blobUrl
+  a.download = filename
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
 }
