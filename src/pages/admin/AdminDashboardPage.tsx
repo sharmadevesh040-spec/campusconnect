@@ -38,12 +38,12 @@ const INTERVIEW_STATUS_DATA = [
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
-    students: 1248,
-    interviews: 86,
-    certificates: 934,
-    events: 12,
-    tasks: 421,
-    announcements: 18
+    students: 0,
+    interviews: 0,
+    certificates: 0,
+    events: 0,
+    tasks: 0,
+    announcements: 0
   })
 
   useEffect(() => {
@@ -58,12 +58,12 @@ export default function AdminDashboardPage() {
           getAnnouncements()
         ])
         setStats({
-          students: Math.max(1248, stus.length),
-          interviews: Math.max(86, ints.length),
-          certificates: Math.max(934, certs.length),
-          events: Math.max(12, evts.length),
-          tasks: Math.max(421, tsks.length),
-          announcements: Math.max(18, anns.length)
+          students: stus.length,
+          interviews: ints.length,
+          certificates: certs.length,
+          events: evts.length,
+          tasks: tsks.length,
+          announcements: anns.length
         })
       } catch (err) {
         console.error('Error fetching admin counts:', err)

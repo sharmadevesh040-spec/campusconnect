@@ -141,36 +141,7 @@ export async function seedDatabase() {
     }
   ]
 
-  const defaultEvents = [
-    {
-      id: 'evt-101',
-      title: 'Global Student Ambassador Cohort Kickoff 2026',
-      description: 'Orientation session for all selected campus leaders. Keynotes from industry mentors and program guidelines rollout.',
-      date: '2026-11-18',
-      time: '04:00 PM EST',
-      venue: 'Online Auditorium',
-      meeting_link: 'https://meet.google.com/xyz-uvwx-rst',
-      max_participants: 500,
-      banner_url: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80',
-      organizer: 'CampusConnect Central Team',
-      registration_deadline: '2026-11-17T23:59:59Z',
-      status: 'Open'
-    },
-    {
-      id: 'evt-102',
-      title: 'Advanced Web & AI Workshop: Building with Gemini',
-      description: 'Hands-on live coding workshop demonstrating how to integrate LLM APIs and modern PWAs.',
-      date: '2026-11-25',
-      time: '05:30 PM EST',
-      venue: 'Virtual Lab 2',
-      meeting_link: 'https://meet.google.com/gem-work-shop',
-      max_participants: 250,
-      banner_url: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&auto=format&fit=crop&q=80',
-      organizer: 'Developer Relations Cohort',
-      registration_deadline: '2026-11-24T23:59:59Z',
-      status: 'Open'
-    }
-  ]
+  const defaultEvents: any[] = []
 
   const defaultTasks = [
     {

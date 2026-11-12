@@ -25,11 +25,11 @@ export default function AdminAnalyticsPage() {
       // Fallback
       setData({
         metrics: {
-          totalStudents: 1248,
-          upcomingInterviews: 86,
-          certificatesIssued: 934,
-          upcomingEvents: 12,
-          pendingTasks: 421
+          totalStudents: 0,
+          upcomingInterviews: 0,
+          certificatesIssued: 0,
+          upcomingEvents: 0,
+          pendingTasks: 0
         },
         charts: {
           studentGrowth: [
@@ -87,23 +87,23 @@ export default function AdminAnalyticsPage() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Students</span>
-          <p className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-1">{data?.metrics?.totalStudents || 1248}</p>
+          <p className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-1">{data?.metrics?.totalStudents ?? 0}</p>
         </Card>
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Interviews</span>
-          <p className="text-2xl font-black text-blue-600 mt-1">{data?.metrics?.upcomingInterviews || 86}</p>
+          <p className="text-2xl font-black text-blue-600 mt-1">{data?.metrics?.upcomingInterviews ?? 0}</p>
         </Card>
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Certificates</span>
-          <p className="text-2xl font-black text-emerald-600 mt-1">{data?.metrics?.certificatesIssued || 934}</p>
+          <p className="text-2xl font-black text-emerald-600 mt-1">{data?.metrics?.certificatesIssued ?? 0}</p>
         </Card>
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Upcoming Events</span>
-          <p className="text-2xl font-black text-purple-600 mt-1">{data?.metrics?.upcomingEvents || 12}</p>
+          <p className="text-2xl font-black text-purple-600 mt-1">{data?.metrics?.upcomingEvents ?? 0}</p>
         </Card>
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Tasks</span>
-          <p className="text-2xl font-black text-amber-600 mt-1">{data?.metrics?.pendingTasks || 421}</p>
+          <p className="text-2xl font-black text-amber-600 mt-1">{data?.metrics?.pendingTasks ?? 0}</p>
         </Card>
       </div>
 
