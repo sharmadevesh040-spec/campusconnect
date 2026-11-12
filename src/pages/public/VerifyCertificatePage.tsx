@@ -15,12 +15,13 @@ import { format } from 'date-fns'
 
 export default function VerifyCertificatePage() {
   const { certificateId } = useParams<{ certificateId?: string }>()
-  const [certIdQuery, setCertIdQuery] = useState(certificateId || 'GSA-2026-000123')
+  const [certIdQuery, setCertIdQuery] = useState(certificateId || '')
   const [certificate, setCertificate] = useState<Certificate | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(Boolean(certificateId))
+  const [searched, setSearched] = useState(Boolean(certificateId))
 
   const verifyId = async (idToVerify: string) => {
+    if (!idToVerify.trim()) return
     setLoading(true)
     setSearched(true)
     try {
@@ -38,8 +39,6 @@ export default function VerifyCertificatePage() {
     if (certificateId) {
       setCertIdQuery(certificateId)
       verifyId(certificateId)
-    } else {
-      verifyId('GSA-2026-000123')
     }
   }, [certificateId])
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, UserCheck, KeyRound, Send, CheckCircle2 } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, KeyRound, Send, CheckCircle2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -35,13 +35,6 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false)
   const [otpSending, setOtpSending] = useState(false)
   const [otpVerifying, setOtpVerifying] = useState(false)
-
-  const handleFillCredentials = (email: string, pass: string) => {
-    setValue('email', email)
-    setValue('password', pass)
-    setOtpEmail(email)
-    toast.info(`Filled credentials for ${email}`)
-  }
 
   const onPasswordSubmit = async (data: PasswordFormData) => {
     try {
@@ -122,36 +115,6 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Database Credentials Quick Fill */}
-      <div className="mb-6 p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
-        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-          PostgreSQL Database Accounts
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => handleFillCredentials('alex@campusconnect.edu', 'student123')}
-            className="flex items-center gap-1.5 p-2 rounded-lg text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 transition-colors text-xs"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-            <div className="truncate">
-              <span className="font-semibold block text-slate-800 dark:text-slate-200">Student</span>
-              <span className="text-[10px] text-slate-400">alex@campusconnect.edu</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleFillCredentials('sharmadevesh040@gmail.com', 'devesh@09')}
-            className="flex items-center gap-1.5 p-2 rounded-lg text-left bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800/60 hover:border-purple-500 transition-colors text-xs"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
-            <div className="truncate">
-              <span className="font-semibold block text-slate-800 dark:text-slate-200">Super Admin</span>
-              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono">sharmadevesh040@gmail.com</span>
-            </div>
-          </button>
-        </div>
-      </div>
 
       {/* Auth Method Tabs */}
       <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-6 text-xs font-semibold">

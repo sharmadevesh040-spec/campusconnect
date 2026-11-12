@@ -32,26 +32,9 @@ export default function AdminAnalyticsPage() {
           pendingTasks: 0
         },
         charts: {
-          studentGrowth: [
-            { month: 'Jun', count: 420 },
-            { month: 'Jul', count: 680 },
-            { month: 'Aug', count: 910 },
-            { month: 'Sep', count: 1050 },
-            { month: 'Oct', count: 1180 },
-            { month: 'Nov', count: 1248 }
-          ],
-          interviewStatus: [
-            { name: 'Confirmed', value: 45 },
-            { name: 'Scheduled', value: 25 },
-            { name: 'Completed', value: 60 },
-            { name: 'Selected', value: 18 }
-          ],
-          taskCompletion: [
-            { status: 'Completed', count: 310 },
-            { status: 'In Progress', count: 85 },
-            { status: 'Pending', count: 42 },
-            { status: 'Overdue', count: 12 }
-          ]
+          studentGrowth: [],
+          interviewStatus: [],
+          taskCompletion: []
         }
       })
     } finally {

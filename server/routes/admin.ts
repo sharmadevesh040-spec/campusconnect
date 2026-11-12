@@ -37,6 +37,34 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
     const taskCountRes = await query(`SELECT count(*)::int FROM tasks WHERE status IN ('Pending', 'In Progress')`)
     const pendingTasks = taskCountRes.rows[0]?.count || 0
 
+    // Real student registration growth from PostgreSQL
+    const growthRes = await query(`
+      SELECT to_char(created_at, 'Mon') as month, count(*)::int as count
+      FROM users
+      WHERE role = 'student'
+      GROUP BY to_char(created_at, 'Mon'), date_trunc('month', created_at)
+      ORDER BY date_trunc('month', created_at) ASC
+    `)
+    const studentGrowth = growthRes.rows.length > 0
+      ? growthRes.rows
+      : [{ month: new Date().toLocaleString('en-US', { month: 'short' }), count: totalStudents }]
+
+    // Real interview status breakdown from PostgreSQL
+    const intStatusRes = await query(`
+      SELECT status as name, count(*)::int as value
+      FROM interviews
+      GROUP BY status
+    `)
+    const interviewStatus = intStatusRes.rows
+
+    // Real task status breakdown from PostgreSQL
+    const taskStatusRes = await query(`
+      SELECT status, count(*)::int as count
+      FROM tasks
+      GROUP BY status
+    `)
+    const taskCompletion = taskStatusRes.rows
+
     res.json({
       metrics: {
         totalStudents,
@@ -46,26 +74,9 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
         pendingTasks
       },
       charts: {
-        studentGrowth: [
-          { month: 'Jun', count: 420 },
-          { month: 'Jul', count: 680 },
-          { month: 'Aug', count: 910 },
-          { month: 'Sep', count: 1050 },
-          { month: 'Oct', count: 1180 },
-          { month: 'Nov', count: totalStudents }
-        ],
-        interviewStatus: [
-          { name: 'Confirmed', value: 45 },
-          { name: 'Scheduled', value: 25 },
-          { name: 'Completed', value: 60 },
-          { name: 'Selected', value: 18 }
-        ],
-        taskCompletion: [
-          { status: 'Completed', count: 310 },
-          { status: 'In Progress', count: 85 },
-          { status: 'Pending', count: 42 },
-          { status: 'Overdue', count: 12 }
-        ]
+        studentGrowth,
+        interviewStatus,
+        taskCompletion
       }
     })
   } catch (err: any) {

@@ -17,24 +17,19 @@ import { getAllCertificates } from '@/services/certificateService'
 import { getEvents } from '@/services/eventService'
 import { getAllTasks } from '@/services/taskService'
 import { getAnnouncements } from '@/services/announcementService'
+import { apiRequest } from '@/services/api'
 import { useAuth } from '@/hooks/useAuth'
 import { UserRole } from '@/types/user'
 
-const MONTHLY_REGISTRATIONS = [
-  { month: 'Jun', students: 120, certificates: 45 },
-  { month: 'Jul', students: 230, certificates: 80 },
-  { month: 'Aug', students: 410, certificates: 150 },
-  { month: 'Sep', students: 680, certificates: 320 },
-  { month: 'Oct', students: 950, certificates: 580 },
-  { month: 'Nov', students: 1248, certificates: 934 },
-]
-
-const INTERVIEW_STATUS_DATA = [
-  { name: 'Selected', value: 42, color: '#10b981' },
-  { name: 'Confirmed', value: 24, color: '#3b82f6' },
-  { name: 'Scheduled', value: 12, color: '#6366f1' },
-  { name: 'Pending', value: 8, color: '#f59e0b' },
-]
+const STATUS_COLORS: Record<string, string> = {
+  Scheduled: '#6366f1',
+  Confirmed: '#3b82f6',
+  Completed: '#10b981',
+  Selected: '#059669',
+  Rejected: '#ef4444',
+  Rescheduled: '#f59e0b',
+  Cancelled: '#94a3b8'
+}
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
@@ -46,16 +41,25 @@ export default function AdminDashboardPage() {
     announcements: 0
   })
 
+  const [charts, setCharts] = useState<{
+    studentGrowth: any[]
+    interviewStatus: any[]
+  }>({
+    studentGrowth: [],
+    interviewStatus: []
+  })
+
   useEffect(() => {
     async function loadData() {
       try {
-        const [stus, ints, certs, evts, tsks, anns] = await Promise.all([
+        const [stus, ints, certs, evts, tsks, anns, dashData] = await Promise.all([
           getAllStudents(),
           getAllInterviews(),
           getAllCertificates(),
           getEvents(),
           getAllTasks(),
-          getAnnouncements()
+          getAnnouncements(),
+          apiRequest<{ metrics: any; charts: any }>('/api/admin/dashboard').catch(() => null)
         ])
         setStats({
           students: stus.length,
@@ -65,6 +69,15 @@ export default function AdminDashboardPage() {
           tasks: tsks.length,
           announcements: anns.length
         })
+        if (dashData?.charts) {
+          setCharts({
+            studentGrowth: dashData.charts.studentGrowth || [],
+            interviewStatus: (dashData.charts.interviewStatus || []).map((i: any) => ({
+              ...i,
+              color: STATUS_COLORS[i.name] || '#3b82f6'
+            }))
+          })
+        }
       } catch (err) {
         console.error('Error fetching admin counts:', err)
       }
@@ -106,7 +119,7 @@ export default function AdminDashboardPage() {
             </div>
             <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats.students.toLocaleString()}</p>
             <span className="text-[11px] text-emerald-600 font-medium flex items-center mt-1">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +14% this month
+              <ShieldCheck className="w-3 h-3 mr-0.5" /> Live PostgreSQL
             </span>
           </Card>
         </Link>
@@ -118,7 +131,7 @@ export default function AdminDashboardPage() {
               <Mic2 className="w-4 h-4 text-indigo-500" />
             </div>
             <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats.interviews}</p>
-            <span className="text-[11px] text-slate-400 mt-1 block">86 in pipeline</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">Scheduled pipeline</span>
           </Card>
         </Link>
 
@@ -142,7 +155,7 @@ export default function AdminDashboardPage() {
               <CalendarDays className="w-4 h-4 text-purple-500" />
             </div>
             <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats.events}</p>
-            <span className="text-[11px] text-purple-600 font-medium mt-1 block">1,500+ signups</span>
+            <span className="text-[11px] text-purple-600 font-medium mt-1 block">Active summits</span>
           </Card>
         </Link>
 
@@ -153,7 +166,7 @@ export default function AdminDashboardPage() {
               <CheckSquare className="w-4 h-4 text-amber-500" />
             </div>
             <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats.tasks}</p>
-            <span className="text-[11px] text-amber-600 font-medium mt-1 block">Across cohorts</span>
+            <span className="text-[11px] text-amber-600 font-medium mt-1 block">Deliverables</span>
           </Card>
         </Link>
       </div>
@@ -164,24 +177,29 @@ export default function AdminDashboardPage() {
         <Card className="p-5 md:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Student Enrollment & Certification Growth</h2>
-              <p className="text-xs text-slate-400">Monthly student registrations vs certificates verified</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Student Enrollment Trend</h2>
+              <p className="text-xs text-slate-400">Monthly student registrations recorded in PostgreSQL</p>
             </div>
-            <Badge variant="primary">2026 Trend</Badge>
+            <Badge variant="primary">Live Data</Badge>
           </div>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={MONTHLY_REGISTRATIONS}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
-                <YAxis stroke="#94a3b8" fontSize={12} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
-                />
-                <Bar dataKey="students" name="Students" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="certificates" name="Certificates" fill="#10b981" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {charts.studentGrowth.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                No registration timeline data recorded yet.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={charts.studentGrowth}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                  <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
+                  <YAxis stroke="#94a3b8" fontSize={12} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="count" name="Registered Students" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Card>
 
@@ -192,34 +210,43 @@ export default function AdminDashboardPage() {
             <p className="text-xs text-slate-400">Active round breakdown</p>
           </div>
           <div className="h-48 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={INTERVIEW_STATUS_DATA}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={75}
-                  paddingAngle={4}
-                >
-                  {INTERVIEW_STATUS_DATA.map(entry => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '11px' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-            {INTERVIEW_STATUS_DATA.map(item => (
-              <div key={item.name} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                <span>{item.name}: <strong>{item.value}</strong></span>
+            {charts.interviewStatus.length === 0 ? (
+              <div className="text-center p-4">
+                <p className="text-xs font-semibold text-slate-400">No interviews scheduled yet</p>
+                <p className="text-[11px] text-slate-500 mt-1">Create interviews from the Interviews tab to visualize rounds.</p>
               </div>
-            ))}
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={charts.interviewStatus}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={4}
+                  >
+                    {charts.interviewStatus.map((entry: any) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '11px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
+          {charts.interviewStatus.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+              {charts.interviewStatus.map((item: any) => (
+                <div key={item.name} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                  <span>{item.name}: <strong>{item.value}</strong></span>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 

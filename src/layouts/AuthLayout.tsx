@@ -22,14 +22,14 @@ export default function AuthLayout() {
         </div>
         <div className="relative z-10 grid grid-cols-2 gap-4">
           {[
-            { label: 'Students', value: '1,200+' },
-            { label: 'Certificates', value: '5,000+' },
-            { label: 'Events', value: '200+' },
-            { label: 'Universities', value: '50+' }
-          ].map(stat => (
-            <div key={stat.label} className="bg-white/10 rounded-2xl p-4">
-              <p className="text-2xl font-bold text-white">{stat.value}</p>
-              <p className="text-blue-200 text-sm">{stat.label}</p>
+            { label: 'QR Verification', value: 'Verified' },
+            { label: 'Countdown & Reminders', value: 'Interviews' },
+            { label: 'Milestones & Deadlines', value: 'Tasks' },
+            { label: 'Installable & Offline', value: 'PWA Ready' }
+          ].map(feature => (
+            <div key={feature.value} className="bg-white/10 rounded-2xl p-4">
+              <p className="text-xl font-bold text-white">{feature.value}</p>
+              <p className="text-blue-200 text-xs mt-0.5">{feature.label}</p>
             </div>
           ))}
         </div>

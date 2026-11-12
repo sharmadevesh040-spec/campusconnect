@@ -67,7 +67,7 @@ export default function LandingPage() {
                 Launch Student Dashboard
               </Button>
             </Link>
-            <Link to="/verify/GSA-2026-000123">
+            <Link to="/verify/GSA-2026-282742">
               <Button variant="outline" size="lg" className="h-12 px-6 text-base" leftIcon={<ShieldCheck className="w-4 h-4 text-emerald-500" />}>
                 Verify a Certificate
               </Button>
@@ -100,7 +100,7 @@ export default function LandingPage() {
             </div>
             <h3 className="text-base font-bold">Verified Certificates & QR</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              Cryptographically trackable certificate IDs (e.g. GSA-2026-000123) with public verification pages, instant PDF downloads, and QR scanning.
+              Cryptographically trackable certificate IDs (e.g. GSA-2026-282742) with public verification pages, instant PDF downloads, and QR scanning.
             </p>
           </Card>
 
@@ -157,7 +157,7 @@ export default function LandingPage() {
         <div className="flex justify-center gap-4 pt-2">
           <Link to="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Student Dashboard</Link>
           <Link to="/admin/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Admin Command</Link>
-          <Link to="/verify/GSA-2026-000123" className="text-blue-600 dark:text-blue-400 hover:underline">Public Verification</Link>
+          <Link to="/verify/GSA-2026-282742" className="text-blue-600 dark:text-blue-400 hover:underline">Public Verification</Link>
         </div>
       </footer>
     </div>
