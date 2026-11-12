@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import { query, fallbackStore } from './index'
 
 export async function seedDatabase() {
-  console.log('[Seed] Checking and seeding default users & data...')
+  console.log('[Seed] Checking and seeding real database records...')
 
   const studentPass = await bcrypt.hash('student123', 10)
   const adminPass = await bcrypt.hash('admin123', 10)
@@ -251,18 +251,6 @@ export async function seedDatabase() {
   fallbackStore.data.tasks = defaultTasks
   fallbackStore.data.announcements = defaultAnnouncements
   fallbackStore.data.resources = defaultResources
-  fallbackStore.data.audit_logs = [
-    {
-      id: 'aud-001',
-      user_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
-      action: 'CERTIFICATE_ISSUED',
-      resource: 'certificates',
-      resource_id: 'GSA-2026-000123',
-      metadata: { student: 'Alex Chen', program: 'GSA 2026' },
-      ip_address: '127.0.0.1',
-      created_at: new Date().toISOString()
-    }
-  ]
 
   // If connected to PostgreSQL, insert records
   try {
@@ -304,8 +292,44 @@ export async function seedDatabase() {
       )
     }
 
-    console.log('[Seed] Database successfully seeded.')
+    for (const e of defaultEvents) {
+      await query(
+        `INSERT INTO events (id, title, description, date, time, venue, meeting_link, max_participants, banner_url, organizer, registration_deadline, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO NOTHING`,
+        [e.id, e.title, e.description, e.date, e.time, e.venue, e.meeting_link, e.max_participants, e.banner_url, e.organizer, e.registration_deadline, e.status]
+      )
+    }
+
+    for (const t of defaultTasks) {
+      await query(
+        `INSERT INTO tasks (id, student_id, title, description, deadline, priority, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO NOTHING`,
+        [t.id, t.student_id, t.title, t.description, t.deadline, t.priority, t.status]
+      )
+    }
+
+    for (const a of defaultAnnouncements) {
+      await query(
+        `INSERT INTO announcements (id, title, message, category, priority, is_important, publish_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO NOTHING`,
+        [a.id, a.title, a.message, a.category, a.priority, a.is_important, a.publish_date]
+      )
+    }
+
+    for (const r of defaultResources) {
+      await query(
+        `INSERT INTO resources (id, title, description, category, type, url)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO NOTHING`,
+        [r.id, r.title, r.description, r.category, r.type, r.url]
+      )
+    }
+
+    console.log('[Seed] Database successfully seeded with real PostgreSQL records.')
   } catch (err) {
-    console.log('[Seed] Seed completed in local memory mode.')
+    console.error('[Seed] PostgreSQL seeding error:', err)
   }
 }

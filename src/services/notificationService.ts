@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Notification } from '@/types'
 import { NotificationType } from '@/types/notification'
-import { SEED_NOTIFICATIONS } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_notifications_cache'
 
@@ -31,7 +30,7 @@ export async function getNotifications(uid?: string): Promise<Notification[]> {
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_NOTIFICATIONS
+    return []
   }
 }
 

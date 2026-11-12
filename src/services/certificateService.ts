@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Certificate } from '@/types'
 import { CertificateStatus } from '@/types/certificate'
-import { SEED_CERTIFICATES } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_certificates_cache'
 
@@ -10,7 +9,7 @@ function mapCert(item: any): Certificate {
     id: item.id,
     certificateId: item.certificate_id || item.certificateId,
     studentId: item.student_id || item.studentId,
-    studentName: item.studentName || 'Student',
+    studentName: item.studentName || item.student_name || 'Student',
     programName: item.program || item.programName || 'CampusConnect Ambassador',
     issueDate: new Date(item.issue_date || item.issueDate),
     pdfURL: item.file_url || item.pdfURL || `/api/certificates/${item.certificate_id || item.id}/download`,
@@ -33,7 +32,7 @@ export async function getCertificates(studentId?: string): Promise<Certificate[]
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_CERTIFICATES
+    return []
   }
 }
 
@@ -46,7 +45,7 @@ export async function getAllCertificates(): Promise<Certificate[]> {
     const list = await apiRequest<any[]>('/api/admin/certificates')
     return list.map(mapCert)
   } catch {
-    return SEED_CERTIFICATES
+    return []
   }
 }
 
@@ -96,8 +95,6 @@ export async function verifyCertificate(certificateId: string): Promise<{
       }
     }
   } catch {
-    const found = SEED_CERTIFICATES.find(c => c.certificateId.toLowerCase() === certificateId.toLowerCase())
-    if (found) return { verified: true, certificate: found, status: 'Valid', studentName: found.studentName, program: found.programName }
     return { verified: false, certificate: null }
   }
 }

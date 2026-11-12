@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Task } from '@/types'
 import { TaskStatus, TaskPriority } from '@/types/task'
-import { SEED_TASKS } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_tasks_cache'
 
@@ -29,7 +28,7 @@ export async function getTasks(studentId?: string): Promise<Task[]> {
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_TASKS
+    return []
   }
 }
 
@@ -42,7 +41,7 @@ export async function getAllTasks(): Promise<Task[]> {
     const list = await apiRequest<any[]>('/api/admin/tasks')
     return list.map(mapTask)
   } catch {
-    return SEED_TASKS
+    return []
   }
 }
 

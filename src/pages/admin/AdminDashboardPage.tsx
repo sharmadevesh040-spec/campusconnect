@@ -37,7 +37,6 @@ const INTERVIEW_STATUS_DATA = [
 ]
 
 export default function AdminDashboardPage() {
-  const { switchRole } = useAuth()
   const [stats, setStats] = useState({
     students: 1248,
     interviews: 86,
@@ -89,14 +88,6 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-slate-700 text-slate-200 hover:bg-slate-800"
-            onClick={() => switchRole(UserRole.STUDENT)}
-          >
-            Switch to Student View
-          </Button>
           <Link to="/admin/students">
             <Button size="sm" leftIcon={<Plus className="w-3.5 h-3.5" />}>
               Add Student

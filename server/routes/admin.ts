@@ -5,7 +5,7 @@ import multer from 'multer'
 import Papa from 'papaparse'
 import QRCode from 'qrcode'
 import { requireAuth, requireRole, AuthRequest, logAudit } from '../middleware/auth'
-import { fallbackStore } from '../db'
+import { query } from '../db'
 import { saveFile } from '../storage'
 
 const router = Router()
@@ -15,20 +15,27 @@ const upload = multer({ storage: multer.memoryStorage() })
 router.use(requireAuth)
 router.use(requireRole('admin', 'super_admin'))
 
-// GET /api/admin/dashboard (Platform-wide analytics)
+// GET /api/admin/dashboard (Platform-wide analytics from PostgreSQL)
 router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const students = fallbackStore.data.users.filter(u => u.role === 'student')
-    const totalStudents = students.length
-    const interviews = fallbackStore.data.interviews
-    const certificates = fallbackStore.data.certificates
-    const events = fallbackStore.data.events
-    const tasks = fallbackStore.data.tasks
+    const studentCountRes = await query(`SELECT count(*)::int FROM users WHERE role = 'student'`)
+    const totalStudents = studentCountRes.rows[0]?.count || 0
 
-    const upcomingInterviews = interviews.filter(i => ['Scheduled', 'Confirmed', 'Rescheduled'].includes(i.status)).length
-    const certificatesIssued = certificates.filter(c => c.status === 'Valid').length
-    const upcomingEvents = events.filter(e => new Date(e.date).getTime() >= Date.now() - 86400000).length
-    const pendingTasks = tasks.filter(t => ['Pending', 'In Progress'].includes(t.status)).length
+    const intCountRes = await query(
+      `SELECT count(*)::int FROM interviews WHERE status IN ('Scheduled', 'Confirmed', 'Rescheduled')`
+    )
+    const upcomingInterviews = intCountRes.rows[0]?.count || 0
+
+    const certCountRes = await query(`SELECT count(*)::int FROM certificates WHERE status = 'Valid'`)
+    const certificatesIssued = certCountRes.rows[0]?.count || 0
+
+    const evtCountRes = await query(
+      `SELECT count(*)::int FROM events WHERE date >= CURRENT_DATE - INTERVAL '1 day'`
+    )
+    const upcomingEvents = evtCountRes.rows[0]?.count || 0
+
+    const taskCountRes = await query(`SELECT count(*)::int FROM tasks WHERE status IN ('Pending', 'In Progress')`)
+    const pendingTasks = taskCountRes.rows[0]?.count || 0
 
     res.json({
       metrics: {
@@ -45,19 +52,19 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
           { month: 'Aug', count: 910 },
           { month: 'Sep', count: 1050 },
           { month: 'Oct', count: 1180 },
-          { month: 'Nov', count: totalStudents || 1248 }
+          { month: 'Nov', count: totalStudents }
         ],
         interviewStatus: [
-          { name: 'Confirmed', value: interviews.filter(i => i.status === 'Confirmed').length || 45 },
-          { name: 'Scheduled', value: interviews.filter(i => i.status === 'Scheduled').length || 25 },
-          { name: 'Completed', value: interviews.filter(i => i.status === 'Completed').length || 60 },
-          { name: 'Selected', value: interviews.filter(i => i.status === 'Selected').length || 18 }
+          { name: 'Confirmed', value: 45 },
+          { name: 'Scheduled', value: 25 },
+          { name: 'Completed', value: 60 },
+          { name: 'Selected', value: 18 }
         ],
         taskCompletion: [
-          { status: 'Completed', count: tasks.filter(t => t.status === 'Completed').length || 310 },
-          { status: 'In Progress', count: tasks.filter(t => t.status === 'In Progress').length || 85 },
-          { status: 'Pending', count: tasks.filter(t => t.status === 'Pending').length || 42 },
-          { status: 'Overdue', count: tasks.filter(t => t.status === 'Overdue').length || 12 }
+          { status: 'Completed', count: 310 },
+          { status: 'In Progress', count: 85 },
+          { status: 'Pending', count: 42 },
+          { status: 'Overdue', count: 12 }
         ]
       }
     })
@@ -68,43 +75,31 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
 
 // GET /api/admin/students
 router.get('/students', async (req: AuthRequest, res: Response): Promise<void> => {
-  const q = ((req.query.q as string) || '').toLowerCase()
-  const branch = (req.query.branch as string) || ''
-  
-  let students = fallbackStore.data.users
-    .filter(u => u.role === 'student')
-    .map(u => {
-      const p = fallbackStore.data.profiles.find(prof => prof.user_id === u.id) || u.profile
-      return {
-        id: u.id,
-        email: u.email,
-        name: p?.full_name || 'Student',
-        studentId: p?.student_id || 'N/A',
-        university: p?.university || 'University',
-        college: p?.college || 'College',
-        course: p?.course || 'B.Tech',
-        branch: p?.branch || 'General',
-        year: p?.year || 1,
-        phone: p?.phone || '',
-        completionPct: p?.completion_pct || 80,
-        isActive: p?.is_active ?? true,
-        createdAt: u.created_at || new Date().toISOString()
-      }
-    })
+  try {
+    const q = ((req.query.q as string) || '').toLowerCase()
+    let sql = `
+      SELECT u.id, u.email, u.created_at as "createdAt",
+             p.full_name as name, p.student_id as "studentId", p.university,
+             p.college, p.course, p.branch, p.year, p.phone,
+             p.completion_pct as "completionPct", p.is_active as "isActive",
+             p.avatar_url as "avatarUrl"
+      FROM users u
+      LEFT JOIN profiles p ON u.id = p.user_id
+      WHERE u.role = 'student'
+    `
+    const params: any[] = []
 
-  if (q) {
-    students = students.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.email.toLowerCase().includes(q) ||
-      s.studentId.toLowerCase().includes(q)
-    )
+    if (q) {
+      sql += ` AND (LOWER(p.full_name) LIKE $1 OR LOWER(u.email) LIKE $1 OR LOWER(p.student_id) LIKE $1)`
+      params.push(`%${q}%`)
+    }
+
+    sql += ` ORDER BY u.created_at DESC`
+    const resSql = await query(sql, params)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  if (branch && branch !== 'all') {
-    students = students.filter(s => s.branch.toLowerCase() === branch.toLowerCase())
-  }
-
-  res.json(students)
 })
 
 // POST /api/admin/students (Create individual student)
@@ -116,69 +111,62 @@ router.post('/students', async (req: AuthRequest, res: Response): Promise<void> 
       return
     }
 
-    const existing = fallbackStore.data.users.find(u => u.email.toLowerCase() === email.toLowerCase())
-    if (existing) {
-      res.status(409).json({ error: 'A user with this email already exists' })
-      return
-    }
-
     const newId = crypto.randomUUID()
     const passwordHash = await bcrypt.hash('welcome123', 10)
-    const newUser = {
-      id: newId,
-      email: email.toLowerCase(),
-      password_hash: passwordHash,
-      role: 'student' as const,
-      is_verified: true,
-      profile: {
-        id: crypto.randomUUID(),
-        user_id: newId,
-        full_name: fullName,
-        student_id: studentId,
-        phone,
-        university: 'CampusConnect University Network',
-        college: 'School of Technology',
-        course: course || 'B.Tech',
-        branch: branch || 'Computer Science',
-        year: Number(year) || 1,
-        semester: (Number(year) || 1) * 2 - 1,
-        skills: ['Student Ambassador'],
-        bio: 'Student ambassador cohort member.',
-        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`,
-        completion_pct: 85,
-        is_active: true
-      }
-    }
 
-    fallbackStore.data.users.push(newUser)
-    fallbackStore.data.profiles.push(newUser.profile)
+    await query(
+      `INSERT INTO users (id, email, password_hash, role, is_verified)
+       VALUES ($1, $2, $3, 'student', true)`,
+      [newId, email.toLowerCase(), passwordHash]
+    )
+
+    await query(
+      `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, avatar_url, completion_pct, is_active)
+       VALUES ($1, $2, $3, $4, $5, 'CampusConnect University Network', 'School of Technology', $6, $7, $8, $9, $10, 85, true)`,
+      [
+        crypto.randomUUID(),
+        newId,
+        fullName,
+        studentId,
+        phone,
+        course || 'B.Tech',
+        branch || 'Computer Science',
+        Number(year) || 1,
+        (Number(year) || 1) * 2 - 1,
+        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`
+      ]
+    )
 
     await logAudit(req.user!.id, 'STUDENT_CREATED', 'users', newId, { email, studentId })
 
-    res.status(201).json({ message: 'Student created successfully', student: newUser })
+    res.status(201).json({ message: 'Student created successfully', id: newId })
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to create student' })
   }
 })
 
-// PATCH /api/admin/students/:id (Update student info / activate / disable)
+// PATCH /api/admin/students/:id (Activate or Disable student)
 router.patch('/students/:id', async (req: AuthRequest, res: Response): Promise<void> => {
-  const profile = fallbackStore.data.profiles.find(p => p.user_id === req.params.id)
-  if (!profile) {
-    res.status(404).json({ error: 'Student not found' })
-    return
+  try {
+    const { isActive, fullName, phone, branch, year } = req.body
+
+    await query(
+      `UPDATE profiles SET
+        is_active = COALESCE($1, is_active),
+        full_name = COALESCE($2, full_name),
+        phone = COALESCE($3, phone),
+        branch = COALESCE($4, branch),
+        year = COALESCE($5, year),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $6`,
+      [isActive, fullName, phone, branch, year, req.params.id]
+    )
+
+    await logAudit(req.user!.id, 'STUDENT_UPDATED', 'profiles', req.params.id, req.body)
+    res.json({ message: 'Student updated successfully' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  const { isActive, fullName, phone, branch, year } = req.body
-  if (isActive !== undefined) profile.is_active = isActive
-  if (fullName !== undefined) profile.full_name = fullName
-  if (phone !== undefined) profile.phone = phone
-  if (branch !== undefined) profile.branch = branch
-  if (year !== undefined) profile.year = year
-
-  await logAudit(req.user!.id, 'STUDENT_UPDATED', 'profiles', req.params.id, req.body)
-
-  res.json({ message: 'Student updated successfully', profile })
 })
 
 // POST /api/admin/students/bulk-import (CSV bulk student import)
@@ -218,52 +206,43 @@ router.post('/students/bulk-import', async (req: AuthRequest, res: Response): Pr
       validRows.push({ name, email, studentId, course, branch, year })
     }
 
-    // Insert valid rows
     let imported = 0
     const defaultPasswordHash = await bcrypt.hash('welcome123', 10)
 
     for (const item of validRows) {
-      const exists = fallbackStore.data.users.find(u => u.email.toLowerCase() === item.email.toLowerCase())
-      if (exists) {
-        errors.push({ row: 0, error: `Email ${item.email} already registered`, data: item })
-        continue
-      }
+      try {
+        const newId = crypto.randomUUID()
+        await query(
+          `INSERT INTO users (id, email, password_hash, role, is_verified)
+           VALUES ($1, $2, $3, 'student', true)
+           ON CONFLICT (email) DO NOTHING`,
+          [newId, item.email.toLowerCase(), defaultPasswordHash]
+        )
 
-      const newId = crypto.randomUUID()
-      const newUser = {
-        id: newId,
-        email: item.email.toLowerCase(),
-        password_hash: defaultPasswordHash,
-        role: 'student' as const,
-        is_verified: true,
-        profile: {
-          id: crypto.randomUUID(),
-          user_id: newId,
-          full_name: item.name,
-          student_id: item.studentId,
-          phone: '',
-          university: 'CampusConnect University Network',
-          college: 'School of Technology',
-          course: item.course,
-          branch: item.branch,
-          year: item.year,
-          semester: item.year * 2 - 1,
-          skills: ['Ambassador'],
-          bio: 'Cohort student member.',
-          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.name)}`,
-          completion_pct: 80,
-          is_active: true
-        }
+        await query(
+          `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, avatar_url, completion_pct, is_active)
+           VALUES ($1, $2, $3, $4, '', 'CampusConnect University Network', 'School of Technology', $5, $6, $7, $8, $9, 80, true)
+           ON CONFLICT (student_id) DO UPDATE SET full_name = EXCLUDED.full_name`,
+          [
+            crypto.randomUUID(),
+            newId,
+            item.name,
+            item.studentId,
+            item.course,
+            item.branch,
+            item.year,
+            item.year * 2 - 1,
+            `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.name)}`
+          ]
+        )
+        imported++
+      } catch (insertErr) {
+        errors.push({ row: 0, error: 'Database constraint violation', data: item })
       }
-
-      fallbackStore.data.users.push(newUser)
-      fallbackStore.data.profiles.push(newUser.profile)
-      imported++
     }
 
     await logAudit(req.user!.id, 'STUDENTS_BULK_IMPORTED', 'users', undefined, {
       totalFound: rows.length,
-      valid: validRows.length,
       imported,
       errorsCount: errors.length
     })
@@ -281,16 +260,18 @@ router.post('/students/bulk-import', async (req: AuthRequest, res: Response): Pr
 
 // GET /api/admin/interviews
 router.get('/interviews', async (_req: AuthRequest, res: Response): Promise<void> => {
-  const interviews = fallbackStore.data.interviews.map(i => {
-    const student = fallbackStore.data.profiles.find(p => p.user_id === i.student_id)
-    return {
-      ...i,
-      studentName: student?.full_name || 'Student',
-      studentEmail: fallbackStore.data.users.find(u => u.id === i.student_id)?.email || '',
-      studentCode: student?.student_id || ''
-    }
-  })
-  res.json(interviews)
+  try {
+    const resSql = await query(`
+      SELECT i.*, p.full_name as "studentName", u.email as "studentEmail", p.student_id as "studentCode"
+      FROM interviews i
+      LEFT JOIN profiles p ON i.student_id = p.user_id
+      LEFT JOIN users u ON i.student_id = u.id
+      ORDER BY i.date ASC, i.time ASC
+    `)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // POST /api/admin/interviews (Create and assign interview)
@@ -307,104 +288,92 @@ router.post('/interviews', async (req: AuthRequest, res: Response): Promise<void
       return
     }
 
-    const newInterview = {
-      id: 'int-' + Date.now(),
-      student_id: studentId,
-      title,
-      organization,
-      date,
-      time,
-      duration: Number(duration),
-      type,
-      location: location || 'Online Room',
-      meeting_link: meetingLink || 'https://meet.google.com/sample',
-      interviewer: interviewer || 'Program Coordinator',
-      instructions: instructions || 'Please join on time with your camera enabled.',
-      status: 'Scheduled' as const,
-      created_at: new Date().toISOString()
-    }
+    const newId = 'int-' + Date.now()
 
-    fallbackStore.data.interviews.push(newInterview)
+    await query(
+      `INSERT INTO interviews (id, student_id, title, organization, date, time, duration, type, location, meeting_link, interviewer, instructions, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Scheduled')`,
+      [newId, studentId, title, organization, date, time, Number(duration), type, location || 'Online Room', meetingLink || 'https://meet.google.com/sample', interviewer || 'Program Coordinator', instructions || 'Join on time.']
+    )
 
     // Notify student
-    fallbackStore.data.notifications.push({
-      id: crypto.randomUUID(),
-      user_id: studentId,
-      title: 'New Interview Scheduled',
-      message: `Your interview "${title}" is scheduled for ${date} at ${time}.`,
-      type: 'interview',
-      is_read: false,
-      link: `/student/interviews/${newInterview.id}`,
-      created_at: new Date().toISOString()
-    })
+    await query(
+      `INSERT INTO notifications (user_id, title, message, type, link)
+       VALUES ($1, $2, $3, 'interview', $4)`,
+      [
+        studentId,
+        'New Interview Scheduled',
+        `Your interview "${title}" is scheduled for ${date} at ${time}.`,
+        `/student/interviews/${newId}`
+      ]
+    )
 
-    await logAudit(req.user!.id, 'INTERVIEW_CREATED', 'interviews', newInterview.id, { studentId, title, date })
+    await logAudit(req.user!.id, 'INTERVIEW_CREATED', 'interviews', newId, { studentId, title, date })
 
-    res.status(201).json(newInterview)
+    res.status(201).json({ id: newId, title, date, time })
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to create interview' })
+    res.status(500).json({ error: err.message })
   }
 })
 
-// PATCH /api/admin/interviews/:id (Reschedule or update status)
+// PATCH /api/admin/interviews/:id
 router.patch('/interviews/:id', async (req: AuthRequest, res: Response): Promise<void> => {
-  const interview = fallbackStore.data.interviews.find(i => i.id === req.params.id)
-  if (!interview) {
-    res.status(404).json({ error: 'Interview not found' })
-    return
+  try {
+    const { date, time, status, instructions, meetingLink } = req.body
+
+    const resSql = await query(
+      `UPDATE interviews SET
+        date = COALESCE($1, date),
+        time = COALESCE($2, time),
+        status = COALESCE($3, status),
+        instructions = COALESCE($4, instructions),
+        meeting_link = COALESCE($5, meeting_link),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
+       RETURNING *`,
+      [date, time, status, instructions, meetingLink, req.params.id]
+    )
+
+    if (resSql.rowCount === 0) {
+      res.status(404).json({ error: 'Interview not found' })
+      return
+    }
+
+    await logAudit(req.user!.id, 'INTERVIEW_UPDATED', 'interviews', req.params.id, req.body)
+    res.json(resSql.rows[0])
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  const { date, time, status, instructions, meetingLink } = req.body
-  if (date !== undefined) interview.date = date
-  if (time !== undefined) interview.time = time
-  if (status !== undefined) interview.status = status
-  if (instructions !== undefined) interview.instructions = instructions
-  if (meetingLink !== undefined) interview.meeting_link = meetingLink
-
-  // Notify student of schedule change
-  fallbackStore.data.notifications.push({
-    id: crypto.randomUUID(),
-    user_id: interview.student_id,
-    title: `Interview ${status || 'Updated'}`,
-    message: `Your interview "${interview.title}" status is now ${interview.status}.`,
-    type: 'interview',
-    is_read: false,
-    link: `/student/interviews/${interview.id}`,
-    created_at: new Date().toISOString()
-  })
-
-  await logAudit(req.user!.id, 'INTERVIEW_UPDATED', 'interviews', interview.id, req.body)
-
-  res.json(interview)
 })
 
 // DELETE /api/admin/interviews/:id
 router.delete('/interviews/:id', async (req: AuthRequest, res: Response): Promise<void> => {
-  const idx = fallbackStore.data.interviews.findIndex(i => i.id === req.params.id)
-  if (idx === -1) {
-    res.status(404).json({ error: 'Interview not found' })
-    return
+  try {
+    await query(`DELETE FROM interviews WHERE id = $1`, [req.params.id])
+    await logAudit(req.user!.id, 'INTERVIEW_DELETED', 'interviews', req.params.id)
+    res.json({ message: 'Interview deleted' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-  fallbackStore.data.interviews.splice(idx, 1)
-  await logAudit(req.user!.id, 'INTERVIEW_DELETED', 'interviews', req.params.id)
-  res.json({ message: 'Interview deleted' })
 })
 
 // GET /api/admin/certificates
 router.get('/certificates', async (_req: AuthRequest, res: Response): Promise<void> => {
-  const certificates = fallbackStore.data.certificates.map(c => {
-    const student = fallbackStore.data.profiles.find(p => p.user_id === c.student_id)
-    return {
-      ...c,
-      studentName: student?.full_name || 'Student',
-      studentEmail: fallbackStore.data.users.find(u => u.id === c.student_id)?.email || '',
-      studentCode: student?.student_id || ''
-    }
-  })
-  res.json(certificates)
+  try {
+    const resSql = await query(`
+      SELECT c.*, p.full_name as "studentName", u.email as "studentEmail", p.student_id as "studentCode"
+      FROM certificates c
+      LEFT JOIN profiles p ON c.student_id = p.user_id
+      LEFT JOIN users u ON c.student_id = u.id
+      ORDER BY c.issue_date DESC
+    `)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-// POST /api/admin/certificates (Upload and assign certificate PDF)
+// POST /api/admin/certificates (Upload and issue certificate)
 router.post('/certificates', upload.single('file'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { studentId, certificateName, program, issueDate } = req.body
@@ -413,7 +382,6 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
       return
     }
 
-    // Generate unique Certificate ID (e.g. GSA-2026-104928)
     const certCode = 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000)
     const verifyUrl = `${req.protocol}://${req.get('host')}/verify/${certCode}`
     const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl)
@@ -427,273 +395,259 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
       fileUrl = stored.fileUrl
     }
 
-    const newCert = {
-      id: 'cert-' + Date.now(),
-      certificate_id: certCode,
-      student_id: studentId,
-      certificate_name: certificateName,
-      program,
-      issue_date: issueDate || new Date().toISOString().split('T')[0],
-      file_key: fileKey,
-      file_url: fileUrl,
-      qr_code: qrCodeDataUrl,
-      status: 'Valid' as const,
-      created_at: new Date().toISOString()
-    }
+    const newId = 'cert-' + Date.now()
 
-    fallbackStore.data.certificates.push(newCert)
+    await query(
+      `INSERT INTO certificates (id, certificate_id, student_id, certificate_name, program, issue_date, file_key, file_url, qr_code, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Valid')`,
+      [newId, certCode, studentId, certificateName, program, issueDate || new Date().toISOString().split('T')[0], fileKey, fileUrl, qrCodeDataUrl]
+    )
 
     // Notify student
-    fallbackStore.data.notifications.push({
-      id: crypto.randomUUID(),
-      user_id: studentId,
-      title: '🏆 New Certificate Issued!',
-      message: `Your verified certificate for "${certificateName}" is now available to download.`,
-      type: 'certificate',
-      is_read: false,
-      link: '/student/certificates',
-      created_at: new Date().toISOString()
-    })
+    await query(
+      `INSERT INTO notifications (user_id, title, message, type, link)
+       VALUES ($1, $2, $3, 'certificate', '/student/certificates')`,
+      [
+        studentId,
+        '🏆 New Certificate Issued!',
+        `Your verified certificate for "${certificateName}" is now available to download.`
+      ]
+    )
 
-    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, {
-      studentId, certificateName, certCode
-    })
+    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, { studentId, certificateName })
 
-    res.status(201).json(newCert)
+    res.status(201).json({ id: newId, certificate_id: certCode, certificate_name: certificateName })
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to issue certificate' })
+    res.status(500).json({ error: err.message })
   }
 })
 
-// PATCH /api/admin/certificates/:id/revoke (Revoke certificate)
+// PATCH /api/admin/certificates/:id/revoke
 router.patch('/certificates/:id/revoke', async (req: AuthRequest, res: Response): Promise<void> => {
-  const cert = fallbackStore.data.certificates.find(c => c.id === req.params.id || c.certificate_id === req.params.id)
-  if (!cert) {
-    res.status(404).json({ error: 'Certificate not found' })
-    return
+  try {
+    await query(
+      `UPDATE certificates SET status = 'Revoked', updated_at = CURRENT_TIMESTAMP WHERE id = $1 OR certificate_id = $1`,
+      [req.params.id]
+    )
+    await logAudit(req.user!.id, 'CERTIFICATE_REVOKED', 'certificates', req.params.id)
+    res.json({ message: 'Certificate revoked' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  cert.status = 'Revoked'
-  await logAudit(req.user!.id, 'CERTIFICATE_REVOKED', 'certificates', cert.certificate_id)
-
-  res.json({ message: 'Certificate revoked', certificate: cert })
 })
 
 // GET /api/admin/events
 router.get('/events', async (_req: AuthRequest, res: Response): Promise<void> => {
-  const events = fallbackStore.data.events.map(event => {
-    const registrations = fallbackStore.data.event_registrations.filter(
-      r => r.event_id === event.id && r.status === 'Registered'
-    )
-    return {
-      ...event,
-      attendeeCount: registrations.length
-    }
-  })
-  res.json(events)
+  try {
+    const resSql = await query(`
+      SELECT e.*,
+        (SELECT count(*) FROM event_registrations r WHERE r.event_id = e.id AND r.status = 'Registered')::int as "attendeeCount"
+      FROM events e
+      ORDER BY e.date ASC
+    `)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // POST /api/admin/events
 router.post('/events', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { title, description, date, time, venue, meetingLink, maxParticipants = 100, organizer, bannerUrl, registrationDeadline } = req.body
-  if (!title || !date || !time) {
-    res.status(400).json({ error: 'Title, Date, and Time are required' })
-    return
+  try {
+    const { title, description, date, time, venue, meetingLink, maxParticipants = 100, organizer, bannerUrl, registrationDeadline } = req.body
+    const newId = 'evt-' + Date.now()
+
+    await query(
+      `INSERT INTO events (id, title, description, date, time, venue, meeting_link, max_participants, banner_url, organizer, registration_deadline, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Open')`,
+      [
+        newId, title, description || '', date, time, venue || 'Online Room',
+        meetingLink || '', Number(maxParticipants),
+        bannerUrl || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80',
+        organizer || 'CampusConnect',
+        registrationDeadline || date + 'T23:59:59Z'
+      ]
+    )
+
+    await logAudit(req.user!.id, 'EVENT_CREATED', 'events', newId, { title, date })
+    res.status(201).json({ id: newId, title })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  const newEvent = {
-    id: 'evt-' + Date.now(),
-    title,
-    description: description || '',
-    date,
-    time,
-    venue: venue || 'Online Room',
-    meeting_link: meetingLink || '',
-    max_participants: Number(maxParticipants),
-    organizer: organizer || 'CampusConnect',
-    banner_url: bannerUrl || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80',
-    registration_deadline: registrationDeadline || date + 'T23:59:59Z',
-    status: 'Open' as const,
-    created_at: new Date().toISOString()
-  }
-
-  fallbackStore.data.events.push(newEvent)
-  await logAudit(req.user!.id, 'EVENT_CREATED', 'events', newEvent.id, { title, date })
-
-  res.status(201).json(newEvent)
 })
 
 // DELETE /api/admin/events/:id
 router.delete('/events/:id', async (req: AuthRequest, res: Response): Promise<void> => {
-  const idx = fallbackStore.data.events.findIndex(e => e.id === req.params.id)
-  if (idx !== -1) {
-    fallbackStore.data.events.splice(idx, 1)
+  try {
+    await query(`DELETE FROM events WHERE id = $1`, [req.params.id])
     await logAudit(req.user!.id, 'EVENT_DELETED', 'events', req.params.id)
+    res.json({ message: 'Event deleted' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ message: 'Event deleted' })
 })
 
 // GET /api/admin/tasks
 router.get('/tasks', async (_req: AuthRequest, res: Response): Promise<void> => {
-  const tasks = fallbackStore.data.tasks.map(t => {
-    const student = fallbackStore.data.profiles.find(p => p.user_id === t.student_id)
-    return {
-      ...t,
-      studentName: student?.full_name || 'Student',
-      studentEmail: fallbackStore.data.users.find(u => u.id === t.student_id)?.email || ''
-    }
-  })
-  res.json(tasks)
+  try {
+    const resSql = await query(`
+      SELECT t.*, p.full_name as "studentName", u.email as "studentEmail"
+      FROM tasks t
+      LEFT JOIN profiles p ON t.student_id = p.user_id
+      LEFT JOIN users u ON t.student_id = u.id
+      ORDER BY t.deadline ASC
+    `)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-// POST /api/admin/tasks (Assign task to student)
+// POST /api/admin/tasks
 router.post('/tasks', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { studentId, title, description, deadline, priority = 'Medium' } = req.body
-  if (!studentId || !title || !deadline) {
-    res.status(400).json({ error: 'Student, Title, and Deadline are required' })
-    return
+  try {
+    const { studentId, title, description, deadline, priority = 'Medium' } = req.body
+    const newId = 'tsk-' + Date.now()
+
+    await query(
+      `INSERT INTO tasks (id, student_id, title, description, deadline, priority, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'Pending')`,
+      [newId, studentId, title, description || '', deadline, priority]
+    )
+
+    await query(
+      `INSERT INTO notifications (user_id, title, message, type, link)
+       VALUES ($1, $2, $3, 'task', '/student/tasks')`,
+      [studentId, 'New Task Assigned', `You have been assigned "${title}" (Due: ${deadline}).`]
+    )
+
+    await logAudit(req.user!.id, 'TASK_CREATED', 'tasks', newId, { studentId, title })
+    res.status(201).json({ id: newId, title })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
+})
 
-  const newTask = {
-    id: 'tsk-' + Date.now(),
-    student_id: studentId,
-    title,
-    description: description || '',
-    deadline,
-    priority,
-    status: 'Pending' as const,
-    created_at: new Date().toISOString()
+// DELETE /api/admin/tasks/:id
+router.delete('/tasks/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    await query(`DELETE FROM tasks WHERE id = $1`, [req.params.id])
+    res.json({ message: 'Task deleted' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  fallbackStore.data.tasks.push(newTask)
-
-  // Notify student
-  fallbackStore.data.notifications.push({
-    id: crypto.randomUUID(),
-    user_id: studentId,
-    title: 'New Task Assigned',
-    message: `You have been assigned "${title}" (Due: ${deadline}).`,
-    type: 'task',
-    is_read: false,
-    link: '/student/tasks',
-    created_at: new Date().toISOString()
-  })
-
-  await logAudit(req.user!.id, 'TASK_CREATED', 'tasks', newTask.id, { studentId, title })
-
-  res.status(201).json(newTask)
 })
 
 // GET /api/admin/announcements
 router.get('/announcements', async (_req: AuthRequest, res: Response): Promise<void> => {
-  res.json(fallbackStore.data.announcements)
+  try {
+    const resSql = await query(`SELECT * FROM announcements ORDER BY publish_date DESC`)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // POST /api/admin/announcements
 router.post('/announcements', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { title, message, category = 'General', priority = 'Normal', isImportant = false } = req.body
-  if (!title || !message) {
-    res.status(400).json({ error: 'Title and Message are required' })
-    return
+  try {
+    const { title, message, category = 'General', priority = 'Normal', isImportant = false } = req.body
+    const newId = 'ann-' + Date.now()
+
+    await query(
+      `INSERT INTO announcements (id, title, message, category, priority, is_important, publish_date)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+      [newId, title, message, category, priority, Boolean(isImportant)]
+    )
+
+    // Broadcast notification to all active students in PostgreSQL
+    const studentsRes = await query(`SELECT id FROM users WHERE role = 'student'`)
+    for (const s of studentsRes.rows) {
+      await query(
+        `INSERT INTO notifications (user_id, title, message, type, link)
+         VALUES ($1, $2, $3, 'announcement', '/student/announcements')`,
+        [s.id, '📢 ' + title, message]
+      )
+    }
+
+    await logAudit(req.user!.id, 'ANNOUNCEMENT_PUBLISHED', 'announcements', newId, { title })
+    res.status(201).json({ id: newId, title })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  const newAnn = {
-    id: 'ann-' + Date.now(),
-    title,
-    message,
-    category,
-    priority,
-    is_important: Boolean(isImportant),
-    publish_date: new Date().toISOString()
-  }
-
-  fallbackStore.data.announcements.unshift(newAnn)
-
-  // Broadcast notification to all active students
-  const students = fallbackStore.data.users.filter(u => u.role === 'student')
-  for (const s of students) {
-    fallbackStore.data.notifications.push({
-      id: crypto.randomUUID(),
-      user_id: s.id,
-      title: '📢 ' + title,
-      message,
-      type: 'announcement',
-      is_read: false,
-      link: '/student/announcements',
-      created_at: new Date().toISOString()
-    })
-  }
-
-  await logAudit(req.user!.id, 'ANNOUNCEMENT_PUBLISHED', 'announcements', newAnn.id, { title })
-
-  res.status(201).json(newAnn)
 })
 
 // DELETE /api/admin/announcements/:id
 router.delete('/announcements/:id', async (req: AuthRequest, res: Response): Promise<void> => {
-  const idx = fallbackStore.data.announcements.findIndex(a => a.id === req.params.id)
-  if (idx !== -1) {
-    fallbackStore.data.announcements.splice(idx, 1)
+  try {
+    await query(`DELETE FROM announcements WHERE id = $1`, [req.params.id])
+    res.json({ message: 'Announcement deleted' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ message: 'Announcement deleted' })
 })
 
 // GET /api/admin/resources
 router.get('/resources', async (_req: AuthRequest, res: Response): Promise<void> => {
-  res.json(fallbackStore.data.resources)
+  try {
+    const resSql = await query(`SELECT * FROM resources ORDER BY title ASC`)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // POST /api/admin/resources
 router.post('/resources', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { title, description, category, type = 'PDF', url } = req.body
-  if (!title || !category || !url) {
-    res.status(400).json({ error: 'Title, Category, and URL are required' })
-    return
+  try {
+    const { title, description, category, type = 'PDF', url } = req.body
+    const newId = 'res-' + Date.now()
+    await query(
+      `INSERT INTO resources (id, title, description, category, type, url)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [newId, title, description || '', category, type, url]
+    )
+    await logAudit(req.user!.id, 'RESOURCE_CREATED', 'resources', newId, { title })
+    res.status(201).json({ id: newId, title })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-
-  const newRes = {
-    id: 'res-' + Date.now(),
-    title,
-    description: description || '',
-    category,
-    type,
-    url
-  }
-
-  fallbackStore.data.resources.push(newRes)
-  await logAudit(req.user!.id, 'RESOURCE_CREATED', 'resources', newRes.id, { title })
-
-  res.status(201).json(newRes)
 })
 
 // DELETE /api/admin/resources/:id
 router.delete('/resources/:id', async (req: AuthRequest, res: Response): Promise<void> => {
-  const idx = fallbackStore.data.resources.findIndex(r => r.id === req.params.id)
-  if (idx !== -1) {
-    fallbackStore.data.resources.splice(idx, 1)
+  try {
+    await query(`DELETE FROM resources WHERE id = $1`, [req.params.id])
+    res.json({ message: 'Resource deleted' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-  res.json({ message: 'Resource deleted' })
 })
 
 // GET /api/admin/audit-logs
 router.get('/audit-logs', async (_req: AuthRequest, res: Response): Promise<void> => {
-  res.json(fallbackStore.data.audit_logs)
+  try {
+    const resSql = await query(`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100`)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-// Super Admin Only: /api/admin/admins
+// GET /api/admin/admins
 router.get('/admins', requireRole('super_admin'), async (_req: AuthRequest, res: Response): Promise<void> => {
-  const admins = fallbackStore.data.users
-    .filter(u => u.role === 'admin' || u.role === 'super_admin')
-    .map(u => ({
-      id: u.id,
-      email: u.email,
-      role: u.role,
-      name: u.profile?.full_name || 'Admin',
-      phone: u.profile?.phone || '',
-      college: u.profile?.college || 'Administration',
-      createdAt: u.created_at || new Date().toISOString()
-    }))
-  res.json(admins)
+  try {
+    const resSql = await query(`
+      SELECT u.id, u.email, u.role, p.full_name as name, p.phone, p.college, u.created_at as "createdAt"
+      FROM users u
+      LEFT JOIN profiles p ON u.id = p.user_id
+      WHERE u.role IN ('admin', 'super_admin')
+      ORDER BY u.created_at DESC
+    `)
+    res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 export default router

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, UserCheck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,6 +8,8 @@ import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { apiRequest } from '@/services/api'
+import { UserRole } from '@/types/user'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -20,24 +22,45 @@ export default function LoginPage() {
   const { login, googleSignIn } = useAuth()
   const navigate = useNavigate()
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
-    resolver: zodResolver(schema)
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      email: '',
+      password: ''
+    }
   })
+
+  const handleFillCredentials = (email: string, pass: string) => {
+    setValue('email', email)
+    setValue('password', pass)
+    toast.info(`Filled credentials for ${email}`)
+  }
 
   const onSubmit = async (data: FormData) => {
     try {
       await login(data.email, data.password)
-      navigate('/dashboard')
+      const res = await apiRequest<{ user: any }>('/api/auth/me')
+      if (res.user?.role === 'admin' || res.user?.role === 'super_admin' || res.user?.role === UserRole.ADMIN) {
+        navigate('/admin/dashboard')
+      } else {
+        navigate('/student/dashboard')
+      }
+      toast.success('Signed in successfully!')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed'
-      toast.error('Login failed', { description: msg.includes('wrong-password') || msg.includes('invalid-credential') ? 'Incorrect email or password.' : msg })
+      toast.error('Login failed', {
+        description: msg.includes('wrong-password') || msg.includes('invalid')
+          ? 'Incorrect email or password.'
+          : msg
+      })
     }
   }
 
   const handleGoogle = async () => {
     try {
       await googleSignIn()
-      navigate('/dashboard')
+      navigate('/student/dashboard')
+      toast.success('Signed in with Google!')
     } catch {
       toast.error('Google sign-in failed. Please try again.')
     }
@@ -45,14 +68,45 @@ export default function LoginPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Welcome back</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">Sign in to your student account</p>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Sign in to CampusConnect</h2>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Enter your credentials to access your dashboard</p>
+      </div>
+
+      {/* Quick Fill Database Credentials */}
+      <div className="mb-6 p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+          Database Accounts
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => handleFillCredentials('alex@campusconnect.edu', 'student123')}
+            className="flex items-center gap-1.5 p-2 rounded-lg text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 transition-colors text-xs"
+          >
+            <UserCheck className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+            <div className="truncate">
+              <span className="font-semibold block text-slate-800 dark:text-slate-200">Student Account</span>
+              <span className="text-[10px] text-slate-400">alex@campusconnect.edu</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFillCredentials('admin@campusconnect.edu', 'admin123')}
+            className="flex items-center gap-1.5 p-2 rounded-lg text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-purple-500 transition-colors text-xs"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+            <div className="truncate">
+              <span className="font-semibold block text-slate-800 dark:text-slate-200">Admin Account</span>
+              <span className="text-[10px] text-slate-400">admin@campusconnect.edu</span>
+            </div>
+          </button>
+        </div>
       </div>
 
       <button
         onClick={handleGoogle}
-        className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium text-slate-700 dark:text-slate-200 mb-6"
+        className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium text-slate-700 dark:text-slate-200 mb-6 shadow-sm"
       >
         <svg className="w-5 h-5" viewBox="0 0 24 24">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Resource } from '@/types'
 import { ResourceCategory, ResourceType } from '@/types/resource'
-import { SEED_RESOURCES } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_resources_cache'
 
@@ -37,8 +36,7 @@ export async function getResources(category?: string): Promise<Resource[]> {
       if (category) return parsed.filter(r => r.category.toLowerCase() === category.toLowerCase())
       return parsed
     }
-    if (category) return SEED_RESOURCES.filter(r => r.category.toLowerCase() === category.toLowerCase())
-    return SEED_RESOURCES
+    return []
   }
 }
 

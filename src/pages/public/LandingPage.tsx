@@ -62,7 +62,7 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Link to="/dashboard">
+            <Link to="/student/dashboard">
               <Button size="lg" className="h-12 px-8 text-base shadow-lg shadow-blue-500/20" rightIcon={<ArrowRight className="w-4 h-4" />}>
                 Launch Student Dashboard
               </Button>
@@ -71,18 +71,6 @@ export default function LandingPage() {
               <Button variant="outline" size="lg" className="h-12 px-6 text-base" leftIcon={<ShieldCheck className="w-4 h-4 text-emerald-500" />}>
                 Verify a Certificate
               </Button>
-            </Link>
-          </div>
-
-          {/* Persona quick launcher */}
-          <div className="pt-4 flex items-center justify-center gap-3 text-xs text-slate-500">
-            <span>Quick Demo Preview:</span>
-            <Link to="/dashboard" className="text-blue-600 dark:text-blue-400 font-semibold hover:underline">
-              Student Persona (Alex)
-            </Link>
-            <span>·</span>
-            <Link to="/admin/dashboard" className="text-purple-600 dark:text-purple-400 font-semibold hover:underline">
-              Admin Persona (Dr. Sarah)
             </Link>
           </div>
         </div>

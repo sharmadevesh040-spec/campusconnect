@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Interview } from '@/types'
 import { InterviewStatus, InterviewType } from '@/types/interview'
-import { SEED_INTERVIEWS } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_interviews_cache'
 
@@ -41,7 +40,7 @@ export async function getInterviews(studentId?: string): Promise<Interview[]> {
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_INTERVIEWS
+    return []
   }
 }
 
@@ -54,7 +53,7 @@ export async function getAllInterviews(): Promise<Interview[]> {
     const data = await apiRequest<any[]>('/api/admin/interviews')
     return data.map(mapInterview)
   } catch {
-    return SEED_INTERVIEWS
+    return []
   }
 }
 

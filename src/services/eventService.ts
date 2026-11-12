@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Event, EventRegistration } from '@/types'
 import { EventStatus } from '@/types/event'
-import { SEED_EVENTS } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_events_cache'
 
@@ -37,7 +36,7 @@ export async function getEvents(): Promise<Event[]> {
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_EVENTS
+    return []
   }
 }
 
@@ -46,7 +45,7 @@ export async function getAllEvents(): Promise<Event[]> {
     const list = await apiRequest<any[]>('/api/admin/events')
     return list.map(mapEvent)
   } catch {
-    return SEED_EVENTS
+    return []
   }
 }
 

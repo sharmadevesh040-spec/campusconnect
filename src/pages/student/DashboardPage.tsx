@@ -13,13 +13,12 @@ import { CountdownTimer } from '@/components/common/CountdownTimer'
 import { Link } from 'react-router-dom'
 import {
   Calendar, Mic2, CheckSquare, Award, Bell, ArrowRight,
-  MapPin, Video, CalendarDays, Clock, ChevronRight, Sparkles, UserCheck
+  MapPin, Video, CalendarDays, Clock, ChevronRight, Sparkles
 } from 'lucide-react'
 import { format, isToday, isTomorrow } from 'date-fns'
 import { InterviewStatus } from '@/types/interview'
 import { TaskStatus } from '@/types/task'
 import { EventStatus } from '@/types/event'
-import { UserRole } from '@/types/user'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -35,7 +34,7 @@ function getInterviewDate(date: Date) {
 }
 
 export default function DashboardPage() {
-  const { userProfile, switchRole } = useAuth()
+  const { userProfile } = useAuth()
   const { interviews, loading: iLoading } = useInterviews()
   const { tasks, loading: tLoading } = useTasks()
   const { events, loading: eLoading } = useEvents()
@@ -69,32 +68,6 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
-      {/* Demo Role Switcher Quick Pill for Testing */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs shadow-sm">
-        <div className="flex items-center gap-2">
-          <UserCheck className="w-4 h-4 text-blue-500" />
-          <span className="font-semibold text-slate-700 dark:text-slate-300">Active Profile:</span>
-          <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-            {userProfile?.fullName} ({userProfile?.university || 'Campus Ambassador'})
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">Switch Persona:</span>
-          <button
-            onClick={() => switchRole(UserRole.STUDENT)}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-medium transition-colors"
-          >
-            Student (Alex)
-          </button>
-          <button
-            onClick={() => switchRole(UserRole.ADMIN)}
-            className="px-2.5 py-1 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
-          >
-            Admin (Dr. Sarah)
-          </button>
-        </div>
-      </div>
-
       {/* Greeting */}
       <div className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-500/10">
         <p className="text-blue-100 text-sm font-medium mb-1">{format(new Date(), 'EEEE, dd MMMM yyyy')}</p>

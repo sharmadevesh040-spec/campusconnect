@@ -1,6 +1,5 @@
 import { apiRequest } from './api'
 import type { Profile } from '@/types'
-import { SEED_PROFILES } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_students_cache'
 
@@ -33,7 +32,7 @@ export async function getAllStudents(): Promise<Profile[]> {
   } catch (err) {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_PROFILES
+    return []
   }
 }
 
@@ -63,7 +62,7 @@ export async function getProfile(uid: string): Promise<Profile | null> {
     }
   } catch {
     const all = await getAllStudents()
-    return all.find(s => s.userId === uid || s.id === uid) || all[0] || null
+    return all.find(s => s.userId === uid || s.id === uid) || null
   }
 }
 

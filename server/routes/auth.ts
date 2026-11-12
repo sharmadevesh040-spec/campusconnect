@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import crypto from 'crypto'
-import { query, fallbackStore } from '../db'
+import { query } from '../db'
 import { generateToken, requireAuth, AuthRequest, logAudit } from '../middleware/auth'
 
 const router = Router()
@@ -43,81 +43,84 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     const { fullName, email, phone, studentId, university, college, course, branch, year, semester, password } = parse.data
 
-    // Check if email already exists
-    const existing = fallbackStore.data.users.find(u => u.email.toLowerCase() === email.toLowerCase())
-    if (existing) {
+    // Check if email already exists in PostgreSQL
+    const existing = await query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [email])
+    if (existing.rows.length > 0) {
       res.status(409).json({ error: 'A student account with this email already exists' })
       return
     }
 
     const passwordHash = await bcrypt.hash(password, 10)
     const newUserId = crypto.randomUUID()
+    const newProfileId = crypto.randomUUID()
+    const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`
 
-    const newUser = {
-      id: newUserId,
-      email: email.toLowerCase(),
-      password_hash: passwordHash,
-      role: 'student' as const,
-      is_verified: true,
-      profile: {
-        id: crypto.randomUUID(),
-        user_id: newUserId,
-        full_name: fullName,
-        student_id: studentId,
-        phone,
-        university,
-        college,
-        course,
-        branch,
+    // Insert user into PostgreSQL
+    await query(
+      `INSERT INTO users (id, email, password_hash, role, is_verified)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newUserId, email.toLowerCase().trim(), passwordHash, 'student', true]
+    )
+
+    // Insert profile into PostgreSQL
+    await query(
+      `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)`,
+      [
+        newProfileId,
+        newUserId,
+        fullName.trim(),
+        studentId.trim(),
+        phone.trim(),
+        university.trim(),
+        college.trim(),
+        course.trim(),
+        branch.trim(),
         year,
         semester,
-        skills: [],
-        bio: '',
-        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`,
-        completion_pct: 85,
-        is_active: true
-      }
-    }
-
-    // Save to database & store
-    fallbackStore.data.users.push(newUser)
-    fallbackStore.data.profiles.push(newUser.profile)
-
-    try {
-      await query(
-        `INSERT INTO users (id, email, password_hash, role, is_verified)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [newUser.id, newUser.email, newUser.password_hash, newUser.role, newUser.is_verified]
-      )
-      await query(
-        `INSERT INTO profiles (user_id, full_name, student_id, phone, university, college, course, branch, year, semester, avatar_url, completion_pct)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-        [newUser.id, fullName, studentId, phone, university, college, course, branch, year, semester, newUser.profile.avatar_url, 85]
-      )
-    } catch (err) {
-      console.warn('[Register] DB sync skipped/handled via memory store')
-    }
+        JSON.stringify(['Student Ambassador', 'Leadership']),
+        'CampusConnect Student Ambassador',
+        avatarUrl,
+        85
+      ]
+    )
 
     const token = generateToken({
-      id: newUser.id,
-      email: newUser.email,
-      role: newUser.role,
-      studentId: newUser.profile.student_id
+      id: newUserId,
+      email: email.toLowerCase().trim(),
+      role: 'student',
+      studentId: studentId.trim()
     })
 
-    await logAudit(newUser.id, 'STUDENT_REGISTERED', 'users', newUser.id, { email: newUser.email })
+    await logAudit(newUserId, 'STUDENT_REGISTERED', 'users', newUserId, { email })
 
     res.status(201).json({
       message: 'Registration successful',
       token,
       user: {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role,
-        profile: newUser.profile
+        id: newUserId,
+        email: email.toLowerCase().trim(),
+        role: 'student',
+        profile: {
+          id: newProfileId,
+          user_id: newUserId,
+          full_name: fullName.trim(),
+          student_id: studentId.trim(),
+          phone: phone.trim(),
+          university: university.trim(),
+          college: college.trim(),
+          course: course.trim(),
+          branch: branch.trim(),
+          year,
+          semester,
+          avatar_url: avatarUrl,
+          completion_pct: 85,
+          is_active: true
+        }
       }
     })
   } catch (err: any) {
+    console.error('[Register Error]', err)
     res.status(500).json({ error: err.message || 'Internal server error' })
   }
 })
@@ -132,41 +135,69 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     const { email, password } = parse.data
-    const user = fallbackStore.data.users.find(u => u.email.toLowerCase() === email.toLowerCase())
 
-    if (!user) {
+    // Fetch user and profile directly from PostgreSQL
+    const userRes = await query(
+      `SELECT u.id, u.email, u.password_hash, u.role, u.is_verified,
+              p.id as profile_id, p.full_name, p.student_id, p.phone, p.university, p.college,
+              p.course, p.branch, p.year, p.semester, p.skills, p.bio, p.avatar_url,
+              p.completion_pct, p.is_active
+       FROM users u
+       LEFT JOIN profiles p ON u.id = p.user_id
+       WHERE LOWER(u.email) = LOWER($1)`,
+      [email.trim()]
+    )
+
+    if (userRes.rows.length === 0) {
       res.status(401).json({ error: 'Invalid email or password' })
       return
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash)
+    const row = userRes.rows[0]
+    const valid = await bcrypt.compare(password, row.password_hash)
     if (!valid) {
       res.status(401).json({ error: 'Invalid email or password' })
       return
     }
 
-    const profile = fallbackStore.data.profiles.find(p => p.user_id === user.id) || user.profile
-
     const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      studentId: profile?.student_id
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      studentId: row.student_id
     })
 
-    await logAudit(user.id, 'USER_LOGIN', 'users', user.id, { role: user.role })
+    await logAudit(row.id, 'USER_LOGIN', 'users', row.id, { role: row.role })
 
     res.json({
       message: 'Login successful',
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        profile
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        profile: {
+          id: row.profile_id || row.id,
+          user_id: row.id,
+          full_name: row.full_name || row.email,
+          student_id: row.student_id || 'GSA-2026-001',
+          phone: row.phone || '',
+          university: row.university || 'University',
+          college: row.college || 'College',
+          course: row.course || 'B.Tech',
+          branch: row.branch || 'Computer Science',
+          year: row.year || 2,
+          semester: row.semester || 3,
+          skills: Array.isArray(row.skills) ? row.skills : (row.skills ? JSON.parse(row.skills) : []),
+          bio: row.bio || '',
+          avatar_url: row.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(row.full_name || row.email)}`,
+          completion_pct: row.completion_pct || 85,
+          is_active: row.is_active ?? true
+        }
       }
     })
   } catch (err: any) {
+    console.error('[Login Error]', err)
     res.status(500).json({ error: err.message || 'Login failed' })
   }
 })
@@ -175,61 +206,113 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 router.post('/google', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, name, role = 'student' } = req.body
+    const targetEmail = (email || 'alex@campusconnect.edu').toLowerCase().trim()
 
-    const targetEmail = (email || 'alex@campusconnect.edu').toLowerCase()
-    let user = fallbackStore.data.users.find(u => u.email === targetEmail)
+    let userRes = await query(
+      `SELECT u.id, u.email, u.role, u.is_verified,
+              p.id as profile_id, p.full_name, p.student_id, p.phone, p.university, p.college,
+              p.course, p.branch, p.year, p.semester, p.skills, p.bio, p.avatar_url,
+              p.completion_pct, p.is_active
+       FROM users u
+       LEFT JOIN profiles p ON u.id = p.user_id
+       WHERE LOWER(u.email) = LOWER($1)`,
+      [targetEmail]
+    )
 
-    if (!user) {
+    let row = userRes.rows[0]
+
+    if (!row) {
       const newUserId = crypto.randomUUID()
+      const newProfileId = crypto.randomUUID()
       const dummyPass = await bcrypt.hash('google-oauth-' + Math.random(), 10)
-      user = {
+      const studentCode = 'GSA-' + Math.floor(100000 + Math.random() * 900000)
+      const avatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
+
+      await query(
+        `INSERT INTO users (id, email, password_hash, role, is_verified)
+         VALUES ($1, $2, $3, $4, true)`,
+        [newUserId, targetEmail, dummyPass, role]
+      )
+
+      await query(
+        `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 90, true)`,
+        [
+          newProfileId,
+          newUserId,
+          name || 'CampusConnect Ambassador',
+          studentCode,
+          '+1 (555) 000-0000',
+          'Global Tech University',
+          'School of Technology',
+          'B.Tech',
+          'Computer Science',
+          2,
+          4,
+          JSON.stringify(['Cloud', 'Web', 'Leadership']),
+          'Google authenticated student ambassador.',
+          avatarUrl
+        ]
+      )
+
+      row = {
         id: newUserId,
         email: targetEmail,
-        password_hash: dummyPass,
-        role: role as any,
+        role,
         is_verified: true,
-        profile: {
-          id: crypto.randomUUID(),
-          user_id: newUserId,
-          full_name: name || 'Google Ambassador User',
-          student_id: 'GSA-' + Math.floor(100000 + Math.random() * 900000),
-          phone: '+1 (555) 000-0000',
-          university: 'Global Tech University',
-          college: 'School of Technology',
-          course: 'B.Tech',
-          branch: 'Computer Science',
-          year: 2,
-          semester: 4,
-          skills: ['Cloud', 'Web', 'Leadership'],
-          bio: 'Google authenticated student ambassador.',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-          completion_pct: 90,
-          is_active: true
-        }
+        profile_id: newProfileId,
+        full_name: name || 'CampusConnect Ambassador',
+        student_id: studentCode,
+        phone: '+1 (555) 000-0000',
+        university: 'Global Tech University',
+        college: 'School of Technology',
+        course: 'B.Tech',
+        branch: 'Computer Science',
+        year: 2,
+        semester: 4,
+        skills: ['Cloud', 'Web', 'Leadership'],
+        bio: 'Google authenticated student ambassador.',
+        avatar_url: avatarUrl,
+        completion_pct: 90,
+        is_active: true
       }
-      fallbackStore.data.users.push(user)
-      fallbackStore.data.profiles.push(user.profile)
     }
 
-    const profile = fallbackStore.data.profiles.find(p => p.user_id === user!.id) || user.profile
-
     const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      studentId: profile?.student_id
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      studentId: row.student_id
     })
 
     res.json({
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        profile
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        profile: {
+          id: row.profile_id || row.id,
+          user_id: row.id,
+          full_name: row.full_name,
+          student_id: row.student_id,
+          phone: row.phone,
+          university: row.university,
+          college: row.college,
+          course: row.course,
+          branch: row.branch,
+          year: row.year,
+          semester: row.semester,
+          skills: Array.isArray(row.skills) ? row.skills : (row.skills ? JSON.parse(row.skills) : []),
+          bio: row.bio,
+          avatar_url: row.avatar_url,
+          completion_pct: row.completion_pct || 90,
+          is_active: row.is_active ?? true
+        }
       }
     })
   } catch (err: any) {
+    console.error('[Google Auth Error]', err)
     res.status(500).json({ error: err.message || 'Google authentication failed' })
   }
 })
@@ -238,22 +321,50 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
 router.get('/me', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id
-    const user = fallbackStore.data.users.find(u => u.id === userId)
-    if (!user) {
+    const userRes = await query(
+      `SELECT u.id, u.email, u.role, u.is_verified,
+              p.id as profile_id, p.full_name, p.student_id, p.phone, p.university, p.college,
+              p.course, p.branch, p.year, p.semester, p.skills, p.bio, p.avatar_url,
+              p.completion_pct, p.is_active
+       FROM users u
+       LEFT JOIN profiles p ON u.id = p.user_id
+       WHERE u.id = $1`,
+      [userId]
+    )
+
+    if (userRes.rows.length === 0) {
       res.status(404).json({ error: 'User not found' })
       return
     }
-    const profile = fallbackStore.data.profiles.find(p => p.user_id === user.id) || user.profile
 
+    const row = userRes.rows[0]
     res.json({
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        profile
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        profile: {
+          id: row.profile_id || row.id,
+          user_id: row.id,
+          full_name: row.full_name || row.email,
+          student_id: row.student_id || 'GSA-2026-001',
+          phone: row.phone || '',
+          university: row.university || 'University',
+          college: row.college || 'College',
+          course: row.course || 'B.Tech',
+          branch: row.branch || 'Computer Science',
+          year: row.year || 2,
+          semester: row.semester || 3,
+          skills: Array.isArray(row.skills) ? row.skills : (row.skills ? JSON.parse(row.skills) : []),
+          bio: row.bio || '',
+          avatar_url: row.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(row.full_name || row.email)}`,
+          completion_pct: row.completion_pct || 85,
+          is_active: row.is_active ?? true
+        }
       }
     })
   } catch (err: any) {
+    console.error('[Me Error]', err)
     res.status(500).json({ error: err.message || 'Failed to fetch user session' })
   }
 })

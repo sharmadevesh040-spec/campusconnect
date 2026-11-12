@@ -1,11 +1,9 @@
 -- CampusConnect PostgreSQL Schema
--- Neon PostgreSQL compatible DDL
-
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Compatible with PostgreSQL 12+, 14, 16, 18 and Neon PostgreSQL
 
 -- Users Table
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'admin', 'super_admin')),
@@ -19,8 +17,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Student Profiles Table
 CREATE TABLE IF NOT EXISTS profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     full_name VARCHAR(255) NOT NULL,
     student_id VARCHAR(100) UNIQUE NOT NULL,
     phone VARCHAR(50),
@@ -41,26 +39,26 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 -- Interviews Table
 CREATE TABLE IF NOT EXISTS interviews (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     organization VARCHAR(255) NOT NULL DEFAULT 'CampusConnect Program',
     date DATE NOT NULL,
     time VARCHAR(50) NOT NULL,
-    duration INT NOT NULL DEFAULT 45, -- in minutes
-    type VARCHAR(50) NOT NULL DEFAULT 'Online' CHECK (type IN ('Online', 'Offline', 'Phone', 'Hybrid')),
+    duration INT NOT NULL DEFAULT 45,
+    type VARCHAR(50) NOT NULL DEFAULT 'Online',
     location VARCHAR(255) DEFAULT 'Online Video Room',
     meeting_link TEXT,
     interviewer VARCHAR(255) NOT NULL,
     instructions TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'Scheduled' CHECK (status IN ('Scheduled', 'Confirmed', 'Completed', 'Rescheduled', 'Cancelled', 'Selected', 'Rejected')),
+    status VARCHAR(50) NOT NULL DEFAULT 'Scheduled',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Events Table
 CREATE TABLE IF NOT EXISTS events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     date DATE NOT NULL,
@@ -71,46 +69,46 @@ CREATE TABLE IF NOT EXISTS events (
     banner_url TEXT,
     organizer VARCHAR(255) NOT NULL,
     registration_deadline TIMESTAMP WITH TIME ZONE NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Almost Full', 'Closed', 'Completed')),
+    status VARCHAR(50) NOT NULL DEFAULT 'Open',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Event Registrations Table
 CREATE TABLE IF NOT EXISTS event_registrations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    event_id VARCHAR(100) NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     registered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(50) NOT NULL DEFAULT 'Registered' CHECK (status IN ('Registered', 'Cancelled', 'Attended')),
+    status VARCHAR(50) NOT NULL DEFAULT 'Registered',
     UNIQUE(event_id, student_id)
 );
 
--- Certificates Table (PDFs stored in File Storage, metadata & references in DB)
+-- Certificates Table
 CREATE TABLE IF NOT EXISTS certificates (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    certificate_id VARCHAR(100) UNIQUE NOT NULL, -- e.g. GSA-2026-000123
-    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    certificate_id VARCHAR(100) UNIQUE NOT NULL,
+    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     certificate_name VARCHAR(255) NOT NULL,
     program VARCHAR(255) NOT NULL,
     issue_date DATE NOT NULL,
     file_key VARCHAR(255),
     file_url TEXT NOT NULL,
     qr_code TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'Valid' CHECK (status IN ('Valid', 'Revoked', 'Expired')),
+    status VARCHAR(50) NOT NULL DEFAULT 'Valid',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Student Tasks Table
 CREATE TABLE IF NOT EXISTS tasks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     deadline DATE NOT NULL,
-    priority VARCHAR(50) NOT NULL DEFAULT 'Medium' CHECK (priority IN ('Low', 'Medium', 'High', 'Urgent')),
-    status VARCHAR(50) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'In Progress', 'Completed', 'Overdue')),
+    priority VARCHAR(50) NOT NULL DEFAULT 'Medium',
+    status VARCHAR(50) NOT NULL DEFAULT 'Pending',
     attachment_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -118,11 +116,11 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 -- Announcements Table
 CREATE TABLE IF NOT EXISTS announcements (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
-    category VARCHAR(50) NOT NULL DEFAULT 'General' CHECK (category IN ('Important', 'Interview', 'Event', 'Certificate', 'General', 'Deadline')),
-    priority VARCHAR(50) NOT NULL DEFAULT 'Normal' CHECK (priority IN ('Low', 'Normal', 'High', 'Urgent')),
+    category VARCHAR(50) NOT NULL DEFAULT 'General',
+    priority VARCHAR(50) NOT NULL DEFAULT 'Normal',
     attachment_url TEXT,
     is_important BOOLEAN NOT NULL DEFAULT false,
     publish_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -132,8 +130,8 @@ CREATE TABLE IF NOT EXISTS announcements (
 
 -- Notifications Table
 CREATE TABLE IF NOT EXISTS notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
     type VARCHAR(50) NOT NULL DEFAULT 'system',
@@ -144,29 +142,29 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Resources Table
 CREATE TABLE IF NOT EXISTS resources (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     category VARCHAR(100) NOT NULL,
-    type VARCHAR(50) NOT NULL DEFAULT 'Website' CHECK (type IN ('PDF', 'Video', 'Website', 'Document')),
+    type VARCHAR(50) NOT NULL DEFAULT 'Website',
     url TEXT NOT NULL,
     file_key VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Admin Users Table (Department, privileges)
+-- Admin Users Table
 CREATE TABLE IF NOT EXISTS admin_users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     department VARCHAR(100) NOT NULL DEFAULT 'Program Operations',
     permissions TEXT[] DEFAULT '{"all"}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Audit Logs Table (Tracks all administrator operations)
+-- Audit Logs Table
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) REFERENCES users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,
     resource VARCHAR(100) NOT NULL,
     resource_id VARCHAR(255),
@@ -175,7 +173,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes for maximum query performance
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_profiles_student_id ON profiles(student_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_cert_id ON certificates(certificate_id);

@@ -1,7 +1,6 @@
 import { apiRequest } from './api'
 import type { Announcement } from '@/types'
 import { AnnouncementCategory, AnnouncementPriority } from '@/types/announcement'
-import { SEED_ANNOUNCEMENTS } from '@/lib/mockData'
 
 const CACHE_KEY = 'campusconnect_announcements_cache'
 
@@ -30,7 +29,7 @@ export async function getAnnouncements(): Promise<Announcement[]> {
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) return JSON.parse(cached)
-    return SEED_ANNOUNCEMENTS
+    return []
   }
 }
 
