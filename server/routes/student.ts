@@ -33,7 +33,11 @@ router.get('/dashboard', async (req: AuthRequest, res: Response): Promise<void> 
 
     // Certificates for this student
     const certRes = await query(
-      `SELECT * FROM certificates WHERE student_id = $1 ORDER BY issue_date DESC`,
+      `SELECT * FROM certificates 
+       WHERE student_id = $1 
+          OR student_id IN (SELECT student_id FROM profiles WHERE user_id = $1)
+          OR student_id IN (SELECT email FROM users WHERE id = $1)
+       ORDER BY issue_date DESC`,
       [studentId]
     )
 
@@ -129,7 +133,14 @@ router.get('/certificates', async (req: AuthRequest, res: Response): Promise<voi
   try {
     const studentId = req.user!.id
     const resSql = await query(
-      `SELECT * FROM certificates WHERE student_id = $1 ORDER BY issue_date DESC`,
+      `SELECT c.*, p.full_name as "studentName", u.email as "studentEmail", p.student_id as "studentCode"
+       FROM certificates c
+       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
+       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
+       WHERE c.student_id = $1 
+          OR c.student_id IN (SELECT student_id FROM profiles WHERE user_id = $1)
+          OR c.student_id IN (SELECT email FROM users WHERE id = $1)
+       ORDER BY c.issue_date DESC`,
       [studentId]
     )
     res.json(resSql.rows)

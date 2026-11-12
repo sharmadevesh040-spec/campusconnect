@@ -136,6 +136,7 @@ export async function createCertificate(data: {
     method: 'POST',
     body
   })
+  localStorage.removeItem(CACHE_KEY)
   return res.id
 }
 

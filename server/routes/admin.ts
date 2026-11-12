@@ -96,7 +96,7 @@ router.get('/students', async (req: AuthRequest, res: Response): Promise<void> =
              p.avatar_url as "avatarUrl"
       FROM users u
       LEFT JOIN profiles p ON u.id = p.user_id
-      WHERE u.role = 'student'
+      WHERE (p.id IS NOT NULL OR u.role IN ('student', 'super_admin', 'admin'))
     `
     const params: any[] = []
 
@@ -408,10 +408,21 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
 
     const newId = 'cert-' + Date.now()
 
+    // Resolve student user ID from UUID, student_id code, or email
+    const stuLookup = await query(
+      `SELECT u.id, u.email, p.student_id, p.full_name
+       FROM users u
+       LEFT JOIN profiles p ON u.id = p.user_id
+       WHERE u.id::text = $1 OR p.student_id = $1 OR LOWER(u.email) = LOWER($1)
+       LIMIT 1`,
+      [studentId]
+    )
+    const resolvedStudentId = stuLookup.rows[0]?.id || studentId
+
     await query(
       `INSERT INTO certificates (id, certificate_id, student_id, certificate_name, program, issue_date, file_key, file_url, qr_code, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Valid')`,
-      [newId, certCode, studentId, certificateName, program, issueDate || new Date().toISOString().split('T')[0], fileKey, fileUrl, qrCodeDataUrl]
+      [newId, certCode, resolvedStudentId, certificateName, program, issueDate || new Date().toISOString().split('T')[0], fileKey, fileUrl, qrCodeDataUrl]
     )
 
     // Notify student
@@ -419,13 +430,13 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
       `INSERT INTO notifications (user_id, title, message, type, link)
        VALUES ($1, $2, $3, 'certificate', '/student/certificates')`,
       [
-        studentId,
+        resolvedStudentId,
         '🏆 New Certificate Issued!',
         `Your verified certificate for "${certificateName}" is now available to download.`
       ]
     )
 
-    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, { studentId, certificateName })
+    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, { studentId: resolvedStudentId, certificateName })
 
     res.status(201).json({ id: newId, certificate_id: certCode, certificate_name: certificateName })
   } catch (err: any) {
