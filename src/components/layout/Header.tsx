@@ -2,6 +2,7 @@ import { Menu, Search, Bell, Shield, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { ThemeToggle } from '@/components/common/ThemeToggle'
+import { LookapSoundToggle } from '@/components/common/LookapSoundToggle'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/useNotifications'
 import { UserRole } from '@/types/user'
@@ -58,6 +59,7 @@ export function Header({ onMenuClick, onSearchClick }: HeaderProps) {
           </Link>
         )}
 
+        <LookapSoundToggle />
         <ThemeToggle />
 
         {/* Notifications */}

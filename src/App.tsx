@@ -43,6 +43,7 @@ import VerifyCertificatePage from '@/pages/public/VerifyCertificatePage'
 import LandingPage from '@/pages/public/LandingPage'
 
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { LookapScrollManager } from '@/components/common/LookapScrollManager'
 import { UserRole } from '@/types/user'
 
 export const AUTHORIZED_ADMIN_EMAIL = 'sharmadevesh040@gmail.com'
@@ -88,7 +89,9 @@ export default function App() {
   }, [theme])
 
   return (
-    <Routes>
+    <>
+      <LookapScrollManager />
+      <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/verify/:certificateId" element={<VerifyCertificatePage />} />
 
@@ -159,5 +162,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }
