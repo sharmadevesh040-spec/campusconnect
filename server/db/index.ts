@@ -54,7 +54,7 @@ class FallbackStore {
       {
         id: 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61',
         email: 'sharmadevesh040@gmail.com',
-        password_hash: '$2b$10$wN7L2Y4jZlh4t98d2uPqIeQoU37xWsmRjJg7TqY4h2cO6bL0l4w1e', // default seeded hash
+        password_hash: '$2b$10$uzfyZvGuyYYALP20A53/jeS42Ltvmtvjsdard3JSTDDFVsNd8pXOO', // Devesh@09 hash
         role: 'super_admin',
         is_verified: true,
         created_at: new Date()

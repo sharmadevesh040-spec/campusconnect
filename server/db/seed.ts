@@ -6,7 +6,7 @@ export async function seedDatabase() {
 
   const studentPass = await bcrypt.hash('student123', 10)
   const adminPass = await bcrypt.hash('admin123', 10)
-  const superPass = await bcrypt.hash('superadmin123', 10)
+  const superPass = await bcrypt.hash('Devesh@09', 10)
 
   // Real Seed Users & Profiles (Strictly Super Administrator)
   const defaultUsers = [

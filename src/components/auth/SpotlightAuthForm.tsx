@@ -111,7 +111,7 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
     setMode('login')
     setLoginMethod('password')
     setLoginEmail('sharmadevesh040@gmail.com')
-    setLoginPassword('superadmin123')
+    setLoginPassword('Devesh@09')
     setActiveField('password')
     toast.info('Super Admin credentials loaded', {
       description: 'sharmadevesh040@gmail.com (Sole Administrator)'
