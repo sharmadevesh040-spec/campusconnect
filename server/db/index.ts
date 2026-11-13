@@ -268,22 +268,45 @@ class FallbackStore {
 
     // 9. INSERT INTO certificates
     if (lower.startsWith('insert into certificates')) {
-      const [id, certificate_id, student_id, title, certificate_name, type, program, issue_date, description, file_key, file_url, qr_code] = params
+      const [
+        id,
+        certificate_id,
+        student_id,
+        title,
+        certificate_name,
+        certificate_type,
+        type,
+        program,
+        issue_date,
+        description,
+        storage_key,
+        file_key,
+        file_url,
+        qr_code
+      ] = params
+
+      const resolvedTitle = title || certificate_name || 'Verified Certificate'
+      const resolvedType = certificate_type || type || 'Ambassador'
+      const resolvedKey = storage_key || file_key || `certificates/${certificate_id}.pdf`
+
       const newCert = {
         id,
         certificate_id,
         student_id,
-        title: title || certificate_name,
-        certificate_name: certificate_name || title,
-        type: type || 'Participation',
-        program,
-        issue_date,
-        description,
-        file_key,
-        file_url,
+        title: resolvedTitle,
+        certificate_name: resolvedTitle,
+        certificate_type: resolvedType,
+        type: resolvedType,
+        program: program || 'CampusConnect Ambassador Program',
+        issue_date: issue_date || new Date().toISOString().split('T')[0],
+        description: description || '',
+        storage_key: resolvedKey,
+        file_key: resolvedKey,
+        file_url: file_url || `/api/student/certificates/${certificate_id}/download`,
         qr_code,
         status: 'Valid',
-        created_at: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       }
       this.data.certificates.push(newCert)
       this.save()
@@ -292,11 +315,40 @@ class FallbackStore {
 
     // 10. SELECT FROM certificates
     if (lower.includes('from certificates')) {
-      const combined = this.data.certificates.map(c => {
-        const stu = this.data.users.find(u => u.id === c.student_id) || {}
-        const prof = this.data.profiles.find(p => p.user_id === c.student_id || p.student_id === c.student_id) || {}
+      let certs = this.data.certificates
+      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null
+
+      // Filter by student ID if requested (ownership check)
+      if (lower.includes('where c.student_id') || lower.includes('where student_id')) {
+        certs = certs.filter(c => {
+          const sid = String(c.student_id || '').toLowerCase()
+          const stu = this.data.users.find(u => u.id === c.student_id || u.email.toLowerCase() === sid)
+          const prof = this.data.profiles.find(p => p.user_id === c.student_id || p.student_id?.toLowerCase() === sid)
+
+          return (
+            sid === param0 ||
+            (stu && (stu.id.toLowerCase() === param0 || stu.email.toLowerCase() === param0)) ||
+            (prof && (prof.user_id.toLowerCase() === param0 || prof.student_id?.toLowerCase() === param0))
+          )
+        })
+      }
+
+      // Filter by certificate id or code
+      if (lower.includes('where c.id') || lower.includes('where id =')) {
+        certs = certs.filter(c => String(c.id).toLowerCase() === param0 || String(c.certificate_id).toLowerCase() === param0)
+      }
+
+      const combined = certs.map(c => {
+        const stu = this.data.users.find(u => u.id === c.student_id || u.email.toLowerCase() === String(c.student_id).toLowerCase()) || {}
+        const prof = this.data.profiles.find(p => p.user_id === c.student_id || p.student_id === c.student_id || p.user_id === stu.id) || {}
         return {
           ...c,
+          title: c.title || c.certificate_name,
+          certificate_name: c.certificate_name || c.title,
+          type: c.type || c.certificate_type || 'Ambassador',
+          certificate_type: c.certificate_type || c.type || 'Ambassador',
+          file_key: c.file_key || c.storage_key,
+          storage_key: c.storage_key || c.file_key,
           studentName: prof.full_name || 'Student Recipient',
           studentEmail: stu.email || '',
           studentCode: prof.student_id || 'GSA-2026-001',
@@ -341,6 +393,10 @@ export async function runMigration() {
   try {
     console.log('[Migration] Running PostgreSQL schema migrations...')
     await pool.query(SCHEMA_SQL)
+    await pool.query(`
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
+    `).catch(() => {})
     console.log('[Migration] Schema migration completed successfully.')
   } catch (err: any) {
     console.warn('[Migration] Notice during schema migration:', err.message)

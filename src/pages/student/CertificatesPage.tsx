@@ -156,7 +156,7 @@ export default function CertificatesPage() {
                       className="flex-1 py-2 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
                     >
                       <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>View PDF</span>
+                      <span>View Certificate</span>
                     </button>
                     <button
                       type="button"
@@ -165,7 +165,7 @@ export default function CertificatesPage() {
                       className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-b from-[#f5f5f7] via-[#d4d4d8] to-[#9999a1] text-zinc-950 text-xs font-bold shadow-md hover:brightness-105 flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>{downloading === cert.id ? 'Exporting...' : 'Download'}</span>
+                      <span>{downloading === cert.id ? 'Exporting...' : 'Download Certificate'}</span>
                     </button>
                     <button 
                       type="button" 

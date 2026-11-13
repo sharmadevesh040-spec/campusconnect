@@ -128,10 +128,9 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
 
     setSubmitting(true)
     try {
-      await login(loginEmail.trim(), loginPassword)
-      const res = await apiRequest<{ user: any }>('/api/auth/me')
-      const role = res.user?.role
-      const email = (res.user?.email || loginEmail).toLowerCase().trim()
+      const loggedUser = await login(loginEmail.trim(), loginPassword)
+      const role = loggedUser?.role
+      const email = (loggedUser?.email || loginEmail).toLowerCase().trim()
 
       if (email === AUTHORIZED_ADMIN_EMAIL.toLowerCase() || role === 'admin' || role === 'super_admin' || role === UserRole.ADMIN) {
         toast.success('Welcome Administrator!', { description: 'Authenticated as Sole Super Administrator' })

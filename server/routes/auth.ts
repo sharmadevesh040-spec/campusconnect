@@ -277,7 +277,17 @@ router.post('/send-login-otp', async (req: Request, res: Response): Promise<void
     )
 
     // Send via SMTP
-    await sendLoginOTPEmail(normalizedEmail, otp, user.full_name || 'Student')
+    const sent = await sendLoginOTPEmail(normalizedEmail, otp, user.full_name || 'Student')
+
+    if (!sent) {
+      console.warn(`[SMTP Warning] Delivery to ${normalizedEmail} failed. Check SMTP credentials.`)
+      res.json({
+        message: `Login passcode generated for ${normalizedEmail}. (Note: If email does not arrive, verify SMTP_PASSWORD in Vercel Production Environment Variables).`,
+        email: normalizedEmail,
+        warning: 'SMTP delivery could not complete. Check Vercel SMTP_PASSWORD configuration.'
+      })
+      return
+    }
 
     res.json({
       message: `A 6-digit login passcode has been sent to ${normalizedEmail} via SMTP.`,

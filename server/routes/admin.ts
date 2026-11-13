@@ -417,7 +417,7 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
       return
     }
 
-    const certCode = 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000)
+    const certCode = 'CERT-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000)
     const verifyUrl = `${req.protocol}://${req.get('host')}/verify/${certCode}`
     const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { width: 300 })
 
@@ -425,7 +425,7 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
     let fileUrl = `/api/student/certificates/${certCode}/download`
 
     if (req.file) {
-      const stored = await saveFile(req.file.buffer, `${certCode}.pdf`, 'certificates')
+      const stored = await saveFile(req.file.buffer, req.file.originalname || `${certCode}.pdf`, 'certificates')
       fileKey = stored.fileKey
       fileUrl = stored.fileUrl
     }
@@ -445,8 +445,9 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
     const studentName = stuLookup.rows[0]?.full_name || 'Student Ambassador'
 
     await query(
-      `INSERT INTO certificates (id, certificate_id, student_id, title, certificate_name, type, program, issue_date, description, file_key, file_url, qr_code, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Valid')`,
+      `INSERT INTO certificates (
+        id, certificate_id, student_id, title, certificate_name, certificate_type, type, program, issue_date, description, storage_key, file_key, file_url, qr_code, status
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'Valid')`,
       [
         newId,
         certCode,
@@ -454,9 +455,11 @@ router.post('/certificates', upload.single('file'), async (req: AuthRequest, res
         certTitle,
         certTitle,
         certType,
+        certType,
         certProgram,
         issueDate || new Date().toISOString().split('T')[0],
         description || null,
+        fileKey,
         fileKey,
         fileUrl,
         qrCodeDataUrl

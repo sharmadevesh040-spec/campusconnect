@@ -7,8 +7,8 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import {
   Award, Plus, ShieldCheck, QrCode, Search,
-  Download, Eye, Edit3, Trash2, FileUp, RefreshCw, Sparkles,
-  ExternalLink, CheckCircle2, Database
+  Download, Eye, Edit3, Trash2, FileUp, RefreshCw,
+  ExternalLink, CheckCircle2, Database, Upload, UserCheck
 } from 'lucide-react'
 import { format } from 'date-fns'
 import QRCode from 'qrcode'
@@ -29,6 +29,10 @@ export default function AdminCertificatesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
+  // Search & Student Selection for Upload Form
+  const [studentSearchQuery, setStudentSearchQuery] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState<Profile | null>(null)
+
   // Modals state
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -44,7 +48,7 @@ export default function AdminCertificatesPage() {
   const [replaceFile, setReplaceFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Issue Form state
+  // Upload Form state
   const [issueForm, setIssueForm] = useState({
     studentId: '',
     title: 'Google Student Ambassador Certificate',
@@ -74,7 +78,9 @@ export default function AdminCertificatesPage() {
       setCertificates(certs)
       setStudents(stus)
       if (stus.length > 0 && !issueForm.studentId) {
-        setIssueForm(prev => ({ ...prev, studentId: stus[0].userId || stus[0].id }))
+        const first = stus[0]
+        setSelectedStudent(first)
+        setIssueForm(prev => ({ ...prev, studentId: first.userId || first.id }))
       }
     } catch {
       toast.error('Failed to load certificates from database')
@@ -93,7 +99,19 @@ export default function AdminCertificatesPage() {
     loadData(search)
   }
 
-  // Handle Create / Issue
+  // Filter students for upload dropdown
+  const filteredStudents = students.filter(s => {
+    const q = studentSearchQuery.toLowerCase().trim()
+    if (!q) return true
+    return (
+      (s.fullName && s.fullName.toLowerCase().includes(q)) ||
+      (s.studentId && s.studentId.toLowerCase().includes(q)) ||
+      (s.email && s.email.toLowerCase().includes(q)) ||
+      (s.university && s.university.toLowerCase().includes(q))
+    )
+  })
+
+  // Handle Upload / Issue
   const handleIssue = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!issueForm.studentId || !issueForm.title) {
@@ -104,26 +122,32 @@ export default function AdminCertificatesPage() {
     setIsSubmitting(true)
     try {
       const certId = generateCertificateId()
+      const studentName = selectedStudent?.fullName || 'Student'
+      const studentCode = selectedStudent?.studentId || 'ID Pending'
+
       await createCertificate({
         studentId: issueForm.studentId,
+        studentName,
         title: issueForm.title,
+        certificateName: issueForm.title,
         type: issueForm.type,
         programName: issueForm.programName,
+        program: issueForm.programName,
         issueDate: issueForm.issueDate,
         description: issueForm.description,
         certificateId: certId,
         file: selectedFile || undefined
       })
 
-      toast.success('Certificate successfully issued!', {
-        description: `Certificate ${certId} linked to student and verified.`
+      toast.success('Certificate Uploaded & Issued! ✓', {
+        description: `Certificate ${certId} linked to ${studentName} (${studentCode}). Automatically appearing in their My Certificates.`
       })
 
       setIsIssueModalOpen(false)
       setSelectedFile(null)
       loadData()
     } catch (err: any) {
-      toast.error(err.message || 'Failed to issue certificate')
+      toast.error(err.message || 'Failed to upload certificate')
     } finally {
       setIsSubmitting(false)
     }
@@ -265,17 +289,17 @@ export default function AdminCertificatesPage() {
               <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/15 text-[11px] font-mono tracking-wide text-slate-200">
                 <span className="spec-dot-emerald" /> VAULT MANAGEMENT
               </span>
-              <span className="spec-tag">SECURITY: SHA-256 SEAL</span>
+              <span className="spec-tag">RELATIONSHIP: certificates.student_id = users.id</span>
               <span className="spec-tag">RECORDS: {certificates.length} ISSUED</span>
             </div>
 
             <div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
                 <Award className="w-7 h-7 text-emerald-400" />
-                Certificate Management & Cryptographic Vault
+                Certificate Management & Issuance Portal
               </h1>
               <p className="text-slate-300 text-sm mt-1 leading-relaxed">
-                Issue tamper-proof certificates, replace digital PDF assets, generate scannable verification QR codes, and maintain authoritative records in PostgreSQL.
+                Select a registered student, upload certificate PDF/image, and automatically bind verified credentials to the student's unique account.
               </p>
             </div>
           </div>
@@ -287,15 +311,15 @@ export default function AdminCertificatesPage() {
               onClick={() => loadData()}
               leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />}
             >
-              Refresh Vault
+              Refresh
             </Button>
             <Button
               variant="tactile"
               size="sm"
               onClick={() => setIsIssueModalOpen(true)}
-              leftIcon={<Plus className="w-4 h-4" />}
+              leftIcon={<Upload className="w-4 h-4" />}
             >
-              Issue Certificate
+              Upload Certificate
             </Button>
           </div>
         </div>
@@ -393,7 +417,7 @@ export default function AdminCertificatesPage() {
                 leftIcon={<Download className="w-3.5 h-3.5" />}
                 className="text-xs"
               >
-                PDF
+                Download PDF
               </Button>
               <Button
                 size="sm"
@@ -440,43 +464,115 @@ export default function AdminCertificatesPage() {
         {filtered.length === 0 && !loading && (
           <EmptyState
             title="No certificates found"
-            description={search ? `No certificates match "${search}". Try another query or clear filter.` : "No certificates issued yet. Click Issue Certificate to award credentials."}
-            actionLabel="Issue Certificate"
+            description={search ? `No certificates match "${search}". Try another query or clear filter.` : "No certificates issued yet. Click Upload Certificate to award credentials."}
+            actionLabel="Upload Certificate"
             onAction={() => setIsIssueModalOpen(true)}
           />
         )}
       </div>
 
-      {/* 1. ISSUE CERTIFICATE MODAL */}
-      <Modal isOpen={isIssueModalOpen} onClose={() => setIsIssueModalOpen(false)} title="Issue Official Verified Certificate">
+      {/* ── 1. UPLOAD CERTIFICATE MODAL ── */}
+      <Modal isOpen={isIssueModalOpen} onClose={() => setIsIssueModalOpen(false)} title="Upload Certificate to Student Account">
         <form onSubmit={handleIssue} className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">1. Select Registered Student</label>
-            <select
-              value={issueForm.studentId}
-              onChange={e => setIssueForm({ ...issueForm, studentId: e.target.value })}
-              className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#151518] text-xs mt-1 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500/50"
-              required
-            >
-              {students.map(s => (
-                <option key={s.id} value={s.userId || s.id} className="dark:bg-[#151518]">
-                  {s.fullName} ({s.studentId || 'ID Pending'}) — {s.email}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Step 1: Select Student with Search by Name, Student ID, Email */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+              <span>1. Select Student (Search by Name, Student ID, or Email)</span>
+              {selectedStudent && (
+                <span className="text-[10px] font-mono text-emerald-400">✓ Linked to Student ID</span>
+              )}
+            </label>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">2. Certificate Title / Name</label>
-              <Input
-                required
-                placeholder="e.g. Google Student Ambassador Certificate"
-                value={issueForm.title}
-                onChange={e => setIssueForm({ ...issueForm, title: e.target.value })}
-                className="mt-1 text-xs dark:bg-[#151518] dark:border-white/10"
+            {/* Search Input for Student */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Type to search: e.g. Devesh, GU2026, or sharmadevesh..."
+                value={studentSearchQuery}
+                onChange={e => setStudentSearchQuery(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 rounded-xl bg-slate-100 dark:bg-[#151518] border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500/50"
               />
             </div>
+
+            {/* Filtered list of registered students */}
+            <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10 divide-y divide-slate-100 dark:divide-white/[0.06] bg-slate-50 dark:bg-[#111115]">
+              {filteredStudents.length === 0 ? (
+                <div className="p-3 text-center text-xs text-slate-400 font-mono">
+                  No registered student found matching "{studentSearchQuery}"
+                </div>
+              ) : (
+                filteredStudents.map(s => {
+                  const sUid = s.userId || s.id
+                  const isSelected = selectedStudent?.userId === sUid || selectedStudent?.id === sUid || issueForm.studentId === sUid
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStudent(s)
+                        setIssueForm(prev => ({ ...prev, studentId: sUid }))
+                      }}
+                      className={`w-full p-2.5 text-left flex items-center justify-between gap-3 text-xs transition-colors ${
+                        isSelected
+                          ? 'bg-emerald-500/15 text-emerald-300 font-medium'
+                          : 'hover:bg-slate-100 dark:hover:bg-white/[0.04] text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center text-[10px] flex-shrink-0">
+                          {(s.fullName || 'S')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate text-slate-900 dark:text-white">{s.fullName}</p>
+                          <p className="text-[10px] font-mono text-slate-400 truncate">{s.email}</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <span className="spec-tag text-[9px]">{s.studentId || 'ID Pending'}</span>
+                      </div>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Selected Student Details Card (Auto-filled) */}
+            {selectedStudent && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Student: {selectedStudent.fullName}</span>
+                      <span className="spec-tag text-[10px] text-emerald-400 border-emerald-500/30">
+                        Student ID: {selectedStudent.studentId || 'GU2026XXXX'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-mono text-slate-400">{selectedStudent.email} · {selectedStudent.university || 'Campus Ambassador'}</p>
+                  </div>
+                </div>
+                <span className="spec-dot-emerald" />
+              </div>
+            )}
+          </div>
+
+          {/* Step 2: Certificate Title */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">2. Certificate Title / Name</label>
+            <Input
+              required
+              placeholder="e.g. Google Student Ambassador Certificate"
+              value={issueForm.title}
+              onChange={e => setIssueForm({ ...issueForm, title: e.target.value })}
+              className="mt-1 text-xs dark:bg-[#151518] dark:border-white/10"
+            />
+          </div>
+
+          {/* Step 3: Certificate Type & Program Name */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">3. Certificate Type</label>
               <select
@@ -484,30 +580,17 @@ export default function AdminCertificatesPage() {
                 onChange={e => setIssueForm({ ...issueForm, type: e.target.value })}
                 className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#151518] text-xs mt-1 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500/50"
               >
-                <option value="Ambassador" className="dark:bg-[#151518]">Ambassador</option>
-                <option value="Participation" className="dark:bg-[#151518]">Participation</option>
-                <option value="Excellence" className="dark:bg-[#151518]">Excellence</option>
-                <option value="Completion" className="dark:bg-[#151518]">Completion</option>
-                <option value="Leadership" className="dark:bg-[#151518]">Leadership</option>
-                <option value="Merit" className="dark:bg-[#151518]">Merit</option>
-                <option value="Honor" className="dark:bg-[#151518]">Honor</option>
+                <option value="Ambassador" className="dark:bg-[#151518]">Ambassador Certificate</option>
+                <option value="Participation" className="dark:bg-[#151518]">Participation Certificate</option>
+                <option value="Excellence" className="dark:bg-[#151518]">Certificate of Excellence</option>
+                <option value="Completion" className="dark:bg-[#151518]">Certificate of Completion</option>
+                <option value="Leadership" className="dark:bg-[#151518]">Leadership Award</option>
+                <option value="Merit" className="dark:bg-[#151518]">Certificate of Merit</option>
+                <option value="Honor" className="dark:bg-[#151518]">Certificate of Honor</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">4. Program Name</label>
-              <Input
-                required
-                placeholder="Google Student Ambassador Program 2026"
-                value={issueForm.programName}
-                onChange={e => setIssueForm({ ...issueForm, programName: e.target.value })}
-                className="mt-1 text-xs dark:bg-[#151518] dark:border-white/10"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">5. Issue Date</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">4. Issue Date</label>
               <Input
                 type="date"
                 required
@@ -518,42 +601,45 @@ export default function AdminCertificatesPage() {
             </div>
           </div>
 
+          {/* Step 4: Certificate File Upload (PDF or Image) */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">5. Certificate File (PDF or Image)</label>
+            <input
+              type="file"
+              accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+              onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+              className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 mt-1 cursor-pointer"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Select student certificate PDF or image to upload to secure storage. If omitted, a verified digital certificate will be generated dynamically.
+            </p>
+          </div>
+
+          {/* Step 5: Description (optional) */}
           <div>
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">6. Optional Description / Citation</label>
             <textarea
               rows={2}
-              placeholder="Citation text describing student accomplishment..."
+              placeholder="e.g. Awarded for extraordinary community leadership, inclusive tech workshops, and peer mentorship."
               value={issueForm.description}
               onChange={e => setIssueForm({ ...issueForm, description: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#151518] text-xs mt-1 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500/50"
             />
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">7. Upload Certificate PDF File</label>
-            <input
-              type="file"
-              accept=".pdf"
-              onChange={e => setSelectedFile(e.target.files?.[0] || null)}
-              className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 mt-1 cursor-pointer"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              Select student's PDF certificate to upload to secure storage. If omitted, a verified digital certificate PDF will be generated dynamically.
-            </p>
-          </div>
-
+          {/* Upload Button */}
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-white/10">
             <Button type="button" variant="tactileDark" size="sm" onClick={() => setIsIssueModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="tactile" size="sm" loading={isSubmitting}>
-              Issue & Notify Student
+            <Button type="submit" variant="tactile" size="sm" loading={isSubmitting} leftIcon={<Upload className="w-4 h-4" />}>
+              Upload Certificate
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* 2. EDIT CERTIFICATE METADATA MODAL */}
+      {/* ── 2. EDIT CERTIFICATE METADATA MODAL ── */}
       <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Certificate Metadata">
         <form onSubmit={handleEditSave} className="space-y-4">
           <div>
@@ -574,13 +660,13 @@ export default function AdminCertificatesPage() {
                 onChange={e => setEditForm({ ...editForm, type: e.target.value })}
                 className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#151518] text-xs mt-1 text-slate-900 dark:text-white"
               >
-                <option value="Ambassador" className="dark:bg-[#151518]">Ambassador</option>
-                <option value="Participation" className="dark:bg-[#151518]">Participation</option>
-                <option value="Excellence" className="dark:bg-[#151518]">Excellence</option>
-                <option value="Completion" className="dark:bg-[#151518]">Completion</option>
-                <option value="Leadership" className="dark:bg-[#151518]">Leadership</option>
-                <option value="Merit" className="dark:bg-[#151518]">Merit</option>
-                <option value="Honor" className="dark:bg-[#151518]">Honor</option>
+                <option value="Ambassador" className="dark:bg-[#151518]">Ambassador Certificate</option>
+                <option value="Participation" className="dark:bg-[#151518]">Participation Certificate</option>
+                <option value="Excellence" className="dark:bg-[#151518]">Certificate of Excellence</option>
+                <option value="Completion" className="dark:bg-[#151518]">Certificate of Completion</option>
+                <option value="Leadership" className="dark:bg-[#151518]">Leadership Award</option>
+                <option value="Merit" className="dark:bg-[#151518]">Certificate of Merit</option>
+                <option value="Honor" className="dark:bg-[#151518]">Certificate of Honor</option>
               </select>
             </div>
             <div>
@@ -640,7 +726,7 @@ export default function AdminCertificatesPage() {
         </form>
       </Modal>
 
-      {/* 3. REPLACE PDF MODAL */}
+      {/* ── 3. REPLACE PDF MODAL ── */}
       <Modal isOpen={isReplaceModalOpen} onClose={() => setIsReplaceModalOpen(false)} title="Replace Certificate PDF">
         <form onSubmit={handleReplaceSave} className="space-y-4">
           <p className="text-xs text-slate-400">
@@ -652,10 +738,10 @@ export default function AdminCertificatesPage() {
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select New PDF File</label>
             <input
               type="file"
-              accept=".pdf"
+              accept=".pdf,image/png,image/jpeg,image/jpg"
               required
               onChange={e => setReplaceFile(e.target.files?.[0] || null)}
-              className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 mt-1 cursor-pointer"
+              className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 mt-1 cursor-pointer"
             />
           </div>
 
@@ -670,7 +756,7 @@ export default function AdminCertificatesPage() {
         </form>
       </Modal>
 
-      {/* 4. DELETE CONFIRMATION MODAL */}
+      {/* ── 4. DELETE CONFIRMATION MODAL ── */}
       <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Certificate Deletion">
         <div className="space-y-4">
           <p className="text-xs text-slate-300">
@@ -690,7 +776,7 @@ export default function AdminCertificatesPage() {
         </div>
       </Modal>
 
-      {/* 5. PDF PREVIEW MODAL */}
+      {/* ── 5. PDF PREVIEW MODAL ── */}
       {previewBlobUrl && (
         <Modal isOpen={Boolean(previewBlobUrl)} onClose={() => { URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null); }} title={previewTitle || 'Certificate Preview'}>
           <div className="space-y-3">
@@ -711,7 +797,7 @@ export default function AdminCertificatesPage() {
         </Modal>
       )}
 
-      {/* 6. QR CODE MODAL */}
+      {/* ── 6. QR CODE MODAL ── */}
       {selectedCertQR && (
         <Modal isOpen={Boolean(selectedCertQR)} onClose={() => setSelectedCertQR(null)} title="Public Verification QR Code">
           <div className="text-center space-y-4 py-2">

@@ -8,7 +8,7 @@ interface AuthContextType {
   userProfile: Profile | null
   loading: boolean
   role: UserRole | null
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<any>
   register: (email: string, password: string, name: string, studentData?: any) => Promise<any>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
@@ -105,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       setUserProfile(prof)
       setRole(prof.role || UserRole.STUDENT)
+      return u
     } else {
       throw new Error('Authentication failed: Missing token or user profile')
     }

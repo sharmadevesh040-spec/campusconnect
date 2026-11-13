@@ -10,72 +10,64 @@ interface SendEmailOptions {
   text?: string
 }
 
-const SMTP_USER = process.env.SMTP_USER || 'sharmadevesh040@gmail.com'
-const SMTP_PASS = (process.env.SMTP_PASS || 'ardkrremkqdinkyk').replace(/\s+/g, '')
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com'
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10)
-const SMTP_SECURE = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (SMTP_PORT === 465)
-const SMTP_FROM = process.env.SMTP_FROM || `CampusConnect <${SMTP_USER}>`
+function getSmtpConfig() {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com'
+  const port = parseInt(process.env.SMTP_PORT || '587', 10)
+  const isSecure = process.env.SMTP_SECURE !== undefined
+    ? process.env.SMTP_SECURE === 'true'
+    : port === 465
 
-let transporter: nodemailer.Transporter | null = null
+  const user = (process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.EMAIL_USER || 'sharmadevesh040@gmail.com').trim()
+  const pass = (process.env.SMTP_PASSWORD || process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || '').replace(/\s+/g, '')
+  const from = process.env.SMTP_FROM || `CampusConnect <${user}>`
 
-export function getTransporter(): nodemailer.Transporter {
-  if (!transporter) {
-    if (SMTP_USER && SMTP_PASS) {
-      transporter = nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_SECURE,
-        auth: {
-          user: SMTP_USER,
-          pass: SMTP_PASS
-        },
-        connectionTimeout: 15000,
-        greetingTimeout: 15000,
-        socketTimeout: 15000,
-        tls: {
-          rejectUnauthorized: false
-        }
-      })
-      console.log(`[SMTP] Configured active SMTP transporter for ${SMTP_USER}@${SMTP_HOST}:${SMTP_PORT}`)
-    } else {
-      // In development or when SMTP credentials are not yet set,
-      // create a jsonTransport/stream transporter that captures mail and logs securely
-      transporter = nodemailer.createTransport({
-        jsonTransport: true
-      })
-      console.log(`[SMTP] Running in development mode (credentials not configured in .env). OTPs & verification codes will log directly to terminal.`)
-    }
-  }
-  return transporter
+  return { host, port, isSecure, user, pass, from }
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailOptions): Promise<{ success: boolean; messageId?: string }> {
+export function getTransporter(): nodemailer.Transporter {
+  const { host, port, isSecure, user, pass } = getSmtpConfig()
+
+  if (!pass) {
+    console.warn('[SMTP] No SMTP_PASSWORD or SMTP_PASS configured in environment. Emails will be logged locally.')
+    return nodemailer.createTransport({
+      jsonTransport: true
+    })
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: isSecure,
+    auth: {
+      user,
+      pass
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    tls: {
+      rejectUnauthorized: false
+    }
+  })
+}
+
+export async function sendEmail({ to, subject, html, text }: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { from, host, port, user } = getSmtpConfig()
   try {
     const mailer = getTransporter()
     const info = await mailer.sendMail({
-      from: SMTP_FROM,
+      from,
       to,
       subject,
       text: text || html.replace(/<[^>]+>/g, ''),
       html
     })
 
-    console.log(`\n========================================`)
-    console.log(`📧 [SMTP EMAIL DISPATCHED]`)
-    console.log(`   To:      ${to}`)
-    console.log(`   Subject: ${subject}`)
-    console.log(`   MessageId: ${info.messageId || 'local-dispatch'}`)
-    console.log(`========================================\n`)
-
+    console.log(`[SMTP] Dispatched to ${to} via ${host}:${port} as ${user}`)
     return { success: true, messageId: info.messageId }
   } catch (error: any) {
-    console.error(`[SMTP Error] Failed to send email to ${to}:`, error.message)
-    // Fallback: log to console so users are never blocked in local dev
-    console.log(`\n⚠️  [SMTP FALLBACK LOG] ${subject} for ${to}:`)
-    console.log(text || html.replace(/<[^>]+>/g, ''))
-    console.log(`----------------------------------------\n`)
-    return { success: false }
+    console.error(`[SMTP Error] Delivery failed to ${to} via ${host}:${port}:`, error?.message || error)
+    return { success: false, error: error?.message || 'SMTP delivery failed' }
   }
 }
 
