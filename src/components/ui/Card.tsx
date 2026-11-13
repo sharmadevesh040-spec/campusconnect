@@ -9,8 +9,8 @@ export function Card({ className, hover, glass, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 shadow-sm',
-        hover && 'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer',
+        'rounded-2xl bg-white dark:bg-[#111115] border border-slate-200/80 dark:border-white/10 shadow-sm dark:shadow-[0_4px_24px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)]',
+        hover && 'hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300 dark:hover:border-white/20 transition-all duration-200 cursor-pointer',
         glass && 'glass',
         className
       )}
