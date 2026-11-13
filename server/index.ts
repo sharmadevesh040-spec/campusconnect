@@ -2,7 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import dotenv from 'dotenv'
-import { runMigration } from './db'
+import { runMigration } from './db/index'
 import { seedDatabase } from './db/seed'
 import authRoutes from './routes/auth'
 import studentRoutes from './routes/student'
@@ -18,6 +18,15 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+
+// Normalize Vercel rewritten URLs when Vercel routes /api/(.*) to /api
+app.use((req, _res, next) => {
+  const matched = req.headers['x-matched-path'] || req.headers['x-forwarded-url']
+  if (matched && typeof matched === 'string' && matched.startsWith('/api') && req.url !== matched) {
+    req.url = matched
+  }
+  next()
+})
 
 // Request logger
 app.use((req, _res, next) => {

@@ -49,6 +49,18 @@ export function getStatelessVerificationCode(email: string, stepOffset = 0): str
   return (digits.slice(0, 6) + '829471').slice(0, 6)
 }
 
+// Deterministic 6-digit login OTP (valid across stateless Vercel Serverless lambdas for 15-30 min)
+export function getStatelessLoginOtp(email: string, stepOffset = 0): string {
+  const secret = (process.env.AUTH_SECRET || 'campusconnect-jwt-secret-key-2026-production') + ':login-otp'
+  const timeStep = Math.floor(Date.now() / (1000 * 60 * 15)) + stepOffset
+  const h = crypto
+    .createHmac('sha256', secret)
+    .update(`${email.toLowerCase().trim()}:${timeStep}`)
+    .digest('hex')
+  const digits = h.replace(/\D/g, '')
+  return (digits.slice(0, 6) + '938152').slice(0, 6)
+}
+
 // POST /api/auth/register (Registers student and sends SMTP verification email)
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -262,29 +274,32 @@ router.post('/send-login-otp', async (req: Request, res: Response): Promise<void
     )
 
     if (userRes.rows.length === 0) {
-      res.status(404).json({ error: 'No account registered with this email address.' })
+      res.status(404).json({ error: 'No account registered with this email address. Please register as an ambassador first.' })
       return
     }
 
     const user = userRes.rows[0]
-    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+    // Generate deterministic 6-digit login OTP (guarantees verification across Vercel serverless cold restarts)
+    const otp = getStatelessLoginOtp(normalizedEmail, 0)
 
     // Store in email_tokens
-    await query(
-      `INSERT INTO email_tokens (email, token, type, expires_at)
-       VALUES ($1, $2, 'login_otp', CURRENT_TIMESTAMP + INTERVAL '10 minutes')`,
-      [normalizedEmail, otp]
-    )
+    try {
+      await query(
+        `INSERT INTO email_tokens (email, token, type, expires_at)
+         VALUES ($1, $2, 'login_otp', CURRENT_TIMESTAMP + INTERVAL '15 minutes')`,
+        [normalizedEmail, otp]
+      )
+    } catch (e) {
+      console.warn('[DB Notice] Could not insert login token into email_tokens table:', e)
+    }
 
-    // Send via SMTP
+    // Send via live SMTP
     const sent = await sendLoginOTPEmail(normalizedEmail, otp, user.full_name || 'Student')
 
     if (!sent) {
-      console.warn(`[SMTP Warning] Delivery to ${normalizedEmail} failed. Check SMTP credentials.`)
-      res.json({
-        message: `Login passcode generated for ${normalizedEmail}. (Note: If email does not arrive, verify SMTP_PASSWORD in Vercel Production Environment Variables).`,
-        email: normalizedEmail,
-        warning: 'SMTP delivery could not complete. Check Vercel SMTP_PASSWORD configuration.'
+      console.error(`[SMTP Error] Delivery to ${normalizedEmail} failed. Verify Vercel SMTP_PASS or GMAIL_APP_PASSWORD.`)
+      res.status(500).json({
+        error: 'Failed to deliver login OTP email. Please ensure SMTP_PASS or GMAIL_APP_PASSWORD is set in Vercel environment variables.'
       })
       return
     }
@@ -309,22 +324,40 @@ router.post('/login-otp', async (req: Request, res: Response): Promise<void> => 
     }
 
     const normalizedEmail = email.toLowerCase().trim()
+    const submittedOtp = otp.trim()
 
-    // Check valid token in email_tokens
-    const tokenRes = await query(
-      `SELECT id FROM email_tokens
-       WHERE LOWER(email) = LOWER($1) AND token = $2 AND type = 'login_otp' AND used = false AND expires_at > CURRENT_TIMESTAMP
-       ORDER BY created_at DESC LIMIT 1`,
-      [normalizedEmail, otp.trim()]
-    )
+    // 1. Check valid token in email_tokens
+    let isValid = false
+    try {
+      const tokenRes = await query(
+        `SELECT id FROM email_tokens
+         WHERE LOWER(email) = LOWER($1) AND token = $2 AND type = 'login_otp' AND used = false AND expires_at > CURRENT_TIMESTAMP
+         ORDER BY created_at DESC LIMIT 1`,
+        [normalizedEmail, submittedOtp]
+      )
 
-    if (tokenRes.rows.length === 0) {
+      if (tokenRes.rows.length > 0) {
+        isValid = true
+        // Mark token as used
+        await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id]).catch(() => {})
+      }
+    } catch (e) {
+      console.warn('[DB Notice] Failed to check email_tokens table:', e)
+    }
+
+    // 2. Stateless HMAC fallback (critical when Vercel serverless containers cold-start between send and verify)
+    if (!isValid) {
+      const currentOtp = getStatelessLoginOtp(normalizedEmail, 0)
+      const prevOtp = getStatelessLoginOtp(normalizedEmail, -1) // 15-minute grace window
+      if (submittedOtp === currentOtp || submittedOtp === prevOtp) {
+        isValid = true
+      }
+    }
+
+    if (!isValid) {
       res.status(400).json({ error: 'Invalid or expired passcode. Please request a new code.' })
       return
     }
-
-    // Mark token as used
-    await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id])
 
     // Fetch user & profile
     const userRes = await query(
@@ -337,6 +370,11 @@ router.post('/login-otp', async (req: Request, res: Response): Promise<void> => 
        WHERE LOWER(u.email) = LOWER($1)`,
       [normalizedEmail]
     )
+
+    if (userRes.rows.length === 0) {
+      res.status(404).json({ error: 'User account not found.' })
+      return
+    }
 
     const row = userRes.rows[0]
     const token = generateToken({

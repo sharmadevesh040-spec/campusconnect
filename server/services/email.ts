@@ -10,27 +10,85 @@ interface SendEmailOptions {
   text?: string
 }
 
-function getSmtpConfig() {
+export function getSmtpConfig() {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com'
-  const port = parseInt(process.env.SMTP_PORT || '587', 10)
-  const isSecure = process.env.SMTP_SECURE !== undefined
-    ? process.env.SMTP_SECURE === 'true'
-    : port === 465
+  const rawPort = process.env.SMTP_PORT
+  const rawSecure = process.env.SMTP_SECURE
 
-  const user = (process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.EMAIL_USER || 'sharmadevesh040@gmail.com').trim()
-  const pass = (process.env.SMTP_PASSWORD || process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || '').replace(/\s+/g, '')
+  const user = (
+    process.env.SMTP_USER ||
+    process.env.SMTP_EMAIL ||
+    process.env.EMAIL_USER ||
+    process.env.GMAIL_USER ||
+    process.env.MAIL_USER ||
+    'sharmadevesh040@gmail.com'
+  ).trim()
+
+  const rawPass = (
+    process.env.SMTP_PASS ||
+    process.env.SMTP_PASSWORD ||
+    process.env.GMAIL_APP_PASSWORD ||
+    process.env.GMAIL_PASSWORD ||
+    process.env.GMAIL_PASS ||
+    process.env.EMAIL_PASSWORD ||
+    process.env.EMAIL_PASS ||
+    process.env.MAIL_PASSWORD ||
+    process.env.APP_PASSWORD ||
+    ''
+  ).trim()
+
+  // Clean password: strip accidental quotes and spaces (Google App Passwords have 4x4 spaces)
+  const pass = rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '')
+
+  const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com')
+
+  // Port & Protocol configuration:
+  // On Vercel Serverless / AWS Lambda, port 587 STARTTLS times out or gets blocked.
+  // Port 465 (SSL direct) or nodemailer service: 'gmail' connects reliably without STARTTLS handshake issues.
+  let port = rawPort ? parseInt(rawPort, 10) : (isGmail ? 465 : 587)
+  let isSecure = rawSecure !== undefined ? rawSecure === 'true' : port === 465
+
+  // For Gmail, force port 465 and SSL unless explicitly configured otherwise
+  if (isGmail && (!rawPort || port === 587) && rawSecure === undefined) {
+    port = 465
+    isSecure = true
+  }
+
   const from = process.env.SMTP_FROM || `CampusConnect <${user}>`
 
-  return { host, port, isSecure, user, pass, from }
+  return { host, port, isSecure, user, pass, from, isGmail }
 }
 
 export function getTransporter(): nodemailer.Transporter {
-  const { host, port, isSecure, user, pass } = getSmtpConfig()
+  const { host, port, isSecure, user, pass, isGmail } = getSmtpConfig()
 
   if (!pass) {
-    console.warn('[SMTP] No SMTP_PASSWORD or SMTP_PASS configured in environment. Emails will be logged locally.')
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      console.error('[SMTP Error] No SMTP password found in environment. Please set SMTP_PASS or GMAIL_APP_PASSWORD in Vercel.')
+    } else {
+      console.warn('[SMTP] No SMTP password configured in environment. Emails will be logged locally.')
+    }
     return nodemailer.createTransport({
       jsonTransport: true
+    })
+  }
+
+  // For Gmail on Vercel or port 465, direct SSL is the most resilient against serverless timeouts
+  if (isGmail && (port === 465 || process.env.VERCEL)) {
+    return nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user,
+        pass
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+      tls: {
+        rejectUnauthorized: false
+      }
     })
   }
 
@@ -52,7 +110,14 @@ export function getTransporter(): nodemailer.Transporter {
 }
 
 export async function sendEmail({ to, subject, html, text }: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { from, host, port, user } = getSmtpConfig()
+  const { from, host, port, user, pass, isGmail } = getSmtpConfig()
+
+  if (!pass) {
+    const errorMsg = 'SMTP delivery failed: Missing SMTP password. Please configure SMTP_PASS or GMAIL_APP_PASSWORD in Vercel.'
+    console.error(`[SMTP Error] ${errorMsg}`)
+    return { success: false, error: errorMsg }
+  }
+
   try {
     const mailer = getTransporter()
     const info = await mailer.sendMail({
@@ -63,7 +128,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions): 
       html
     })
 
-    console.log(`[SMTP] Dispatched to ${to} via ${host}:${port} as ${user}`)
+    console.log(`[SMTP] Successfully dispatched to ${to} via ${isGmail ? 'Gmail SSL (465)' : `${host}:${port}`} as ${user}`)
     return { success: true, messageId: info.messageId }
   } catch (error: any) {
     console.error(`[SMTP Error] Delivery failed to ${to} via ${host}:${port}:`, error?.message || error)
