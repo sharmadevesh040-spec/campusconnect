@@ -19,11 +19,13 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Normalize Vercel rewritten URLs when Vercel routes /api/(.*) to /api
+// Normalize Vercel rewritten URLs when Vercel routes /api/(.*) to /api or /api/index.js
 app.use((req, _res, next) => {
   const matched = req.headers['x-matched-path'] || req.headers['x-forwarded-url']
   if (matched && typeof matched === 'string' && matched.startsWith('/api') && req.url !== matched) {
     req.url = matched
+  } else if (req.url.startsWith('/api/index.js')) {
+    req.url = req.url.replace('/api/index.js', '/api') || '/api'
   }
   next()
 })

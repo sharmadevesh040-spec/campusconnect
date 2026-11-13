@@ -1546,15 +1546,20 @@ import fs3 from "fs";
 // server/storage/index.ts
 import fs2 from "fs";
 import path2 from "path";
+import os2 from "os";
 import crypto2 from "crypto";
-var UPLOAD_DIR = path2.resolve(process.cwd(), "uploads");
+var isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
+var UPLOAD_DIR = isServerless ? path2.join(os2.tmpdir(), "uploads") : path2.resolve(process.cwd(), "uploads");
 var CERT_DIR = path2.join(UPLOAD_DIR, "certificates");
 var AVATAR_DIR = path2.join(UPLOAD_DIR, "avatars");
 var DOCS_DIR = path2.join(UPLOAD_DIR, "documents");
-for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
-  if (!fs2.existsSync(dir)) {
-    fs2.mkdirSync(dir, { recursive: true });
+try {
+  for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
+    if (!fs2.existsSync(dir)) {
+      fs2.mkdirSync(dir, { recursive: true });
+    }
   }
+} catch (err) {
 }
 async function saveFile(buffer, originalName, category = "documents") {
   const ext = path2.extname(originalName) || ".pdf";
@@ -3164,6 +3169,8 @@ app.use((req, _res, next) => {
   const matched = req.headers["x-matched-path"] || req.headers["x-forwarded-url"];
   if (matched && typeof matched === "string" && matched.startsWith("/api") && req.url !== matched) {
     req.url = matched;
+  } else if (req.url.startsWith("/api/index.js")) {
+    req.url = req.url.replace("/api/index.js", "/api") || "/api";
   }
   next();
 });
@@ -3211,11 +3218,11 @@ app.use((err, _req, res, _next) => {
   console.error("[API Error]:", err);
   res.status(err.status || 500).json({ error: err.message || "Internal Server Error" });
 });
-var isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
+var isServerless2 = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
 async function start() {
   try {
     await ensureInitialized();
-    if (process.env.NODE_ENV !== "test" && !isServerless) {
+    if (process.env.NODE_ENV !== "test" && !isServerless2) {
       app.listen(PORT, () => {
         console.log(`\u{1F680} CampusConnect API server running at http://localhost:${PORT}`);
       });
@@ -3224,22 +3231,13 @@ async function start() {
     console.error("Failed to initialize CampusConnect server:", err);
   }
 }
-if (!isServerless) {
+if (!isServerless2) {
   start();
 }
 var index_default = app;
 
 // server/vercelHandler.ts
-function handler(req, res) {
-  const matched = req.headers["x-matched-path"] || req.headers["x-forwarded-url"];
-  if (matched && typeof matched === "string" && matched.startsWith("/api") && (req.url === "/api" || req.url === "/" || req.url === "/api/")) {
-    req.url = matched;
-  } else if ((req.url === "/api" || req.url === "/" || req.url === "/api/") && req.query?.all) {
-    const subpath = Array.isArray(req.query.all) ? req.query.all.join("/") : req.query.all;
-    req.url = `/api/${subpath}`;
-  }
-  return index_default(req, res);
-}
+var vercelHandler_default = index_default;
 export {
-  handler as default
+  vercelHandler_default as default
 };

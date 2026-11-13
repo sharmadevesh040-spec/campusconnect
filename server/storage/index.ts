@@ -1,17 +1,23 @@
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import crypto from 'crypto'
 
-const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads')
+const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV)
+const UPLOAD_DIR = isServerless ? path.join(os.tmpdir(), 'uploads') : path.resolve(process.cwd(), 'uploads')
 const CERT_DIR = path.join(UPLOAD_DIR, 'certificates')
 const AVATAR_DIR = path.join(UPLOAD_DIR, 'avatars')
 const DOCS_DIR = path.join(UPLOAD_DIR, 'documents')
 
-// Ensure local directories exist
-for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
+// Ensure local directories exist safely without throwing on read-only serverless filesystems
+try {
+  for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
   }
+} catch (err) {
+  // Non-fatal: filesystem is read-only or in serverless sandbox
 }
 
 export interface StoredFile {

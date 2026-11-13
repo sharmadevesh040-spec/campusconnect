@@ -1,15 +1,21 @@
 import * as esbuild from 'esbuild'
 import fs from 'fs'
-import path from 'path'
 
 async function build() {
-  console.log('📦 Bundling serverless functions for Vercel deployment...')
+  console.log('📦 Bundling single authoritative serverless API for Vercel deployment...')
   
   if (!fs.existsSync('api')) {
     fs.mkdirSync('api', { recursive: true })
   }
 
-  // Bundle server into api/index.js
+  // Remove any conflicting or duplicate handlers
+  for (const file of ['api/[...all].js', 'api/[...all].ts', 'api/index.ts']) {
+    if (fs.existsSync(file)) {
+      fs.unlinkSync(file)
+    }
+  }
+
+  // Bundle Express backend into single authoritative entrypoint: api/index.js
   await esbuild.build({
     entryPoints: ['server/vercelHandler.ts'],
     bundle: true,
@@ -22,18 +28,7 @@ async function build() {
     minify: false,
   })
 
-  // Also write api/[...all].js identical to api/index.js
-  fs.copyFileSync('api/index.js', 'api/[...all].js')
-
-  // Remove .ts files in api/ to avoid extension conflict collisions during Vercel deployment
-  if (fs.existsSync('api/index.ts')) {
-    fs.unlinkSync('api/index.ts')
-  }
-  if (fs.existsSync('api/[...all].ts')) {
-    fs.unlinkSync('api/[...all].ts')
-  }
-
-  console.log('✅ Serverless API bundled successfully: api/index.js & api/[...all].js')
+  console.log('✅ Single Vercel Serverless API bundled successfully: api/index.js')
 }
 
 build().catch(err => {
