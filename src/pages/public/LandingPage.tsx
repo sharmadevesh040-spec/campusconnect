@@ -1,251 +1,259 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   GraduationCap, Mic2, Award, Calendar, CheckSquare,
-  ShieldCheck, ArrowRight, Smartphone, Sparkles, CheckCircle2, ChevronRight,
-  Clock, Video, MapPin, ExternalLink, Activity
+  ShieldCheck, ArrowRight, Smartphone, ExternalLink,
+  Clock, MapPin, Video, ChevronRight
 } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { LookapStage } from '@/components/dashboard/LookapStage'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { ThemeToggle } from '@/components/common/ThemeToggle'
-import { TactileIdVault } from '@/components/dashboard/TactileIdVault'
 
 export default function LandingPage() {
   const { canInstall, install } = usePWAInstall()
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'interviews' | 'credentials' | 'tasks'>('all')
+
+  const feedItems = [
+    {
+      id: 'round-1',
+      type: 'interviews',
+      tag: 'INTERVIEW · SCHEDULED',
+      ratio: '1.594',
+      title: 'Google Student Ambassador — Technical Strategy Round',
+      by: 'Priya Nair · Campus Program Director',
+      status: 'TODAY 14:30',
+      statusColor: 'text-[#11d04a]',
+      detail: 'Meet link attached · 45 min round · Presentation ready',
+      icon: Mic2
+    },
+    {
+      id: 'cert-1',
+      type: 'credentials',
+      tag: 'CREDENTIAL · SHA-256',
+      ratio: '1.414',
+      title: 'Official Certificate of Academic & Leadership Excellence',
+      by: 'University Senate & Student Affairs',
+      status: 'VERIFIED',
+      statusColor: 'text-[#2170f5]',
+      detail: 'GSA-2026-282742 · Tamper-proof vector PDF issued',
+      icon: Award
+    },
+    {
+      id: 'task-1',
+      type: 'tasks',
+      tag: 'MILESTONE · HIGH PRIORITY',
+      ratio: '1.600',
+      title: 'Submit Fall Semester Ambassador Outreach Telemetry',
+      by: 'Lead Coordinator · Deadline: 18 Nov',
+      status: 'IN PROGRESS',
+      statusColor: 'text-[#f59e0b]',
+      detail: 'IndexedDB background sync active · 4 milestones done',
+      icon: CheckSquare
+    },
+    {
+      id: 'event-1',
+      type: 'interviews',
+      tag: 'CAMPUS FORUM · OPEN',
+      ratio: '1.778',
+      title: 'Autonomous AI Agents & Systems Student Colloquium',
+      by: 'Engineering Hall C · Hybrid Stream',
+      status: '84/100 SEATS',
+      statusColor: 'text-[#11d04a]',
+      detail: 'RSVP confirmed · Calendar .ics invite synchronized',
+      icon: Calendar
+    }
+  ]
+
+  const filteredItems = selectedFilter === 'all'
+    ? feedItems
+    : feedItems.filter(i => i.type === selectedFilter)
 
   return (
-    <div className="min-h-screen bg-[#fafbfc] dark:bg-[#090a0f] text-slate-900 dark:text-slate-100 flex flex-col selection:bg-blue-500 selection:text-white transition-colors">
+    <div className="min-h-screen bg-[#090a0d] text-[#e4e4e7] flex flex-col font-sans selection:bg-[#27272a] selection:text-white">
       
-      {/* ── Lookap Hairline Floating Navbar ── */}
-      <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#0c0d12]/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-white/[0.08] px-6 py-3.5 transition-colors">
+      {/* ── Lookap Hairline Header ── */}
+      <header className="sticky top-0 z-40 bg-[#090a0d]/90 backdrop-blur-md border-b border-white/[0.08] px-6 py-3.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
+          
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_2px_8px_rgba(37,99,235,0.4)]">
-              <GraduationCap className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg bg-[#18181b] border border-white/10 flex items-center justify-center text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
+              <GraduationCap className="w-4 h-4 text-[#e4e4e7]" />
             </div>
-            <div>
-              <span className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white">CampusConnect</span>
-              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono font-bold block -mt-0.5 tracking-wider uppercase">OS v2.4</span>
+            <div className="flex items-baseline gap-2">
+              <span className="font-medium text-[15px] tracking-[-0.01em] text-white">CampusConnect</span>
+              <span className="font-mono text-[11px] text-[#71717a]">/ registry</span>
             </div>
           </div>
 
-          {/* Center Status Pill */}
-          <div className="hidden md:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 text-xs font-mono">
-            <span className="spec-dot-emerald" />
-            <span className="text-slate-600 dark:text-slate-300">CAMPUS RADAR: ONLINE</span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             {canInstall && (
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={install}
-                leftIcon={<Smartphone className="w-3.5 h-3.5 text-blue-500" />}
-                className="text-xs font-medium"
+                className="hidden sm:inline-flex items-center gap-1.5 font-mono text-[11px] text-[#a1a1aa] hover:text-white transition-colors"
               >
-                Install App
-              </Button>
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>install pwa</span>
+              </button>
             )}
-            <ThemeToggle />
-            <Link to="/login">
-              <Button variant="ghost" size="sm" className="text-xs">Sign In</Button>
-            </Link>
-            <Link to="/student/dashboard">
-              <Button variant="tactile" size="sm" className="text-xs font-semibold">
-                Open Dashboard
-              </Button>
+
+            <Link
+              to="/student/dashboard"
+              className="sfx-button sfx-silver h-8 rounded-full px-4 text-[12px]"
+            >
+              Open dashboard
             </Link>
           </div>
+
         </div>
       </header>
 
-      {/* ── Lookap Cosmic Hero Section ── */}
-      <section className="relative overflow-hidden pt-12 md:pt-20 pb-20 px-6">
-        {/* Ambient Radial Lighting */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-blue-500/15 via-indigo-500/10 to-transparent blur-3xl pointer-events-none -z-10" />
-
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-12 items-center">
+      {/* ── Main Lookap Hero Grid ── */}
+      <main className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10 pb-20 space-y-20">
+        
+        <section className="grid items-center gap-10 pt-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:pt-10">
           
-          {/* Left Column: Value Proposition */}
-          <div className="lg:col-span-7 space-y-6 text-left">
+          {/* Left Column: Understated Editorial Typography */}
+          <div className="flex min-w-0 max-w-[54ch] flex-col gap-6">
             
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 text-xs font-mono font-medium">
-                <Sparkles className="w-3.5 h-3.5" /> LOOKAP DESIGN INTELLIGENCE
-              </span>
-              <span className="spec-tag">100% OFFLINE PWA</span>
-              <span className="spec-tag">SHA-256 VAULT</span>
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.12]">
-              The Campus OS for{' '}
-              <span className="bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 bg-clip-text text-transparent">
-                High-Performing Students.
-              </span>
+            <h1 className="text-[38px] leading-[1.06] font-medium tracking-[-0.035em] text-[#ededed] sm:text-[50px]">
+              The campus operating system for high-performing students.
             </h1>
 
-            <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed">
-              Track live interview rounds with precise countdown timers, manage high-priority tasks, explore campus bulletins, and download tamper-proof cryptographic certificates.
+            <p className="text-[15px] leading-[1.58] text-[#8e8e93]">
+              CampusConnect is an offline-first student registry. It measures interview rounds with millisecond countdowns, organizes high-priority milestones, synchronizes verified credentials over SHA-256, and keeps your campus synchronized with zero latency.
             </p>
 
-            {/* Lookap Tactile Action Controls */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link to="/student/dashboard">
-                <Button variant="tactile" size="lg" className="h-12 px-7 text-sm font-semibold" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                  Launch Student Dashboard
-                </Button>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                to="/student/dashboard"
+                className="sfx-button sfx-silver h-10 rounded-full px-5 text-[14px]"
+              >
+                Launch student dashboard
               </Link>
-              <Link to="/verify/GSA-2026-282742">
-                <Button variant="tactileSilver" size="lg" className="h-12 px-6 text-sm" leftIcon={<ShieldCheck className="w-4 h-4 text-emerald-600" />}>
-                  Verify Certificate
-                </Button>
+              <Link
+                to="/verify/GSA-2026-282742"
+                className="sfx-button sfx-outline h-10 rounded-full px-5 text-[14px]"
+              >
+                Verify a certificate
               </Link>
             </div>
 
-            {/* Spec Footnotes */}
-            <div className="pt-4 flex items-center gap-6 text-xs font-mono text-slate-400 dark:text-slate-500">
-              <span className="flex items-center gap-1.5"><span className="spec-dot-emerald" /> ZERO LATENCY SYNC</span>
-              <span className="flex items-center gap-1.5"><span className="spec-dot-indigo" /> AMBASSADOR RADAR</span>
-              <span className="flex items-center gap-1.5"><span className="spec-dot-amber" /> 60 FPS MOTION</span>
-            </div>
+            {/* Lookap Strict Monospace Stats Telemetry */}
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-3 pt-2 font-mono text-[12px] text-[#71717a] sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
+              <div>
+                <dt className="text-[#ededed] font-semibold">100%</dt>
+                <dd>offline PWA</dd>
+              </div>
+              <div>
+                <dt className="text-[#ededed] font-semibold">SHA-256</dt>
+                <dd>tamper-proof certs</dd>
+              </div>
+              <div>
+                <dt className="text-[#ededed] font-semibold">0 ms</dt>
+                <dd>local IndexedDB sync</dd>
+              </div>
+              <div>
+                <dt className="text-[#ededed] font-semibold">60 fps</dt>
+                <dd>tactile motion</dd>
+              </div>
+            </dl>
+
           </div>
 
-          {/* Right Column: Interactive Lookap Tactile ID Vault */}
-          <div className="lg:col-span-5 flex justify-center">
-            <div className="w-full max-w-md">
-              <TactileIdVault
-                studentName="Devesh Sharma"
-                studentId="CC-2026-8841"
-                role="Campus Fellow & Lead"
-                program="Google Student Ambassador"
-              />
-              <p className="text-center text-[11px] font-mono text-slate-400 dark:text-slate-500 mt-3">
-                Interactive hardware simulation · Hover or click to insert badge
-              </p>
-            </div>
+          {/* Right Column: Authentic Lookap Hardware ID Card Stage */}
+          <div className="relative min-w-0 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.9)]">
+            <LookapStage
+              studentName="Devesh Sharma"
+              studentId="CC-2026-8841"
+              role="Campus Fellow"
+              program="Google Student Ambassador"
+            />
           </div>
 
-        </div>
-      </section>
+        </section>
 
-      {/* ── Lookap Bento Feature Showcase ── */}
-      <section className="max-w-6xl mx-auto px-6 py-14 space-y-10">
-        
-        <div className="text-center max-w-2xl mx-auto space-y-2">
-          <span className="spec-tag">ARCHITECTURE & CAPABILITIES</span>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Built with Lookap Tactile Tokens
-          </h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm">
-            High-density interfaces designed for maximum clarity, low cognitive load, and instant access to campus operations.
-          </p>
-        </div>
-
-        {/* 3-Column Bento Cards */}
-        <div className="grid md:grid-cols-3 gap-5">
+        {/* ── Lookap Specimen Feed Section ── */}
+        <section className="space-y-6 pt-6 border-t border-white/[0.08]">
           
-          {/* Card 1: Interview Command Center */}
-          <div className="lookap-card p-6 flex flex-col justify-between group hover:-translate-y-1 transition-all">
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-white/[0.06] border border-blue-200/50 dark:border-white/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                <Mic2 className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Interview Command Center</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Precision countdown timers, direct video links, calendar (.ics) synchronization, and automated preparation checklists before your round.
-              </p>
-            </div>
-            
-            <div className="lookap-recess p-3 mt-4 text-[11px] font-mono flex items-center justify-between">
-              <span className="text-slate-500">COUNTDOWN:</span>
-              <span className="text-blue-600 dark:text-blue-400 font-bold">02h 45m 12s</span>
-            </div>
-          </div>
-
-          {/* Card 2: Cryptographic Credentials */}
-          <div className="lookap-card p-6 flex flex-col justify-between group hover:-translate-y-1 transition-all">
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-white/[0.06] border border-emerald-200/50 dark:border-white/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                <Award className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Cryptographic Credentials</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Official certificates signed with SHA-256 tamper-proof verification. Instantly inspect full PDF previews or download with one click.
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-medium tracking-[-0.02em] text-[#ededed]">
+                Active Campus Registry
+              </h2>
+              <p className="text-[13px] text-[#71717a] mt-0.5">
+                Curated operational pipeline · real-time status across rounds, certificates, and tasks
               </p>
             </div>
 
-            <div className="lookap-recess p-3 mt-4 text-[11px] font-mono flex items-center justify-between">
-              <span className="text-slate-500">HASH:</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold truncate max-w-[140px]">7f8a...c921 ✓</span>
+            {/* Lookap Filter Pills */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#121216] border border-white/[0.08] rounded-xl font-mono text-[11px]">
+              {(['all', 'interviews', 'credentials', 'tasks'] as const).map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => setSelectedFilter(filter)}
+                  className={`px-3 py-1 rounded-lg transition-all capitalize ${
+                    selectedFilter === filter
+                      ? 'bg-[#222228] text-white font-semibold shadow-sm'
+                      : 'text-[#8e8e93] hover:text-white'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Card 3: Priority Task Pipeline */}
-          <div className="lookap-card p-6 flex flex-col justify-between group hover:-translate-y-1 transition-all">
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-white/[0.06] border border-amber-200/50 dark:border-white/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <CheckSquare className="w-5 h-5" />
+          {/* 2-Column High-Density Specimen Cards */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {filteredItems.map(item => (
+              <div
+                key={item.id}
+                className="group relative rounded-xl bg-[#121216] border border-white/[0.08] p-5 hover:border-white/20 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.5)] flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[#71717a] mb-2.5">
+                    <span className="tracking-wider uppercase">{item.tag}</span>
+                    <span className="font-semibold text-[#a1a1aa]">{item.ratio}</span>
+                  </div>
+
+                  <h3 className="text-[15px] font-medium text-[#ededed] group-hover:text-white transition-colors leading-snug mb-1">
+                    {item.title}
+                  </h3>
+                  <p className="text-[12px] text-[#8e8e93] mb-4">
+                    {item.by}
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between font-mono text-[11px]">
+                  <span className="text-[#71717a] truncate max-w-[240px]">{item.detail}</span>
+                  <span className={`font-semibold ${item.statusColor}`}>
+                    {item.status}
+                  </span>
+                </div>
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Milestone Task Engine</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Prioritized academic deadlines, event planning pipelines, and offline-first IndexedDB background sync for zero work loss.
-              </p>
-            </div>
-
-            <div className="lookap-recess p-3 mt-4 text-[11px] font-mono flex items-center justify-between">
-              <span className="text-slate-500">COMPLETION:</span>
-              <span className="text-amber-600 dark:text-amber-400 font-bold">92% ON TRACK</span>
-            </div>
+            ))}
           </div>
 
-        </div>
-      </section>
+        </section>
 
-      {/* ── Lookap Action Banner ── */}
-      <section className="max-w-6xl mx-auto px-6 pb-20">
-        <div className="rounded-3xl bg-[#0c0d12] border border-white/15 p-8 md:p-12 text-white relative overflow-hidden shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-          
-          <div className="space-y-2 max-w-xl text-left relative z-10">
-            <span className="spec-tag">READY FOR PRODUCTION</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Ready to experience the CampusConnect Dashboard?
-            </h2>
-            <p className="text-slate-300 text-sm">
-              Sign in with your student credentials or explore the live dashboard preview immediately.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 relative z-10 flex-shrink-0">
-            <Link to="/student/dashboard">
-              <Button variant="tactile" size="lg" className="h-12 px-8 font-semibold">
-                Launch Dashboard
-              </Button>
-            </Link>
-            <Link to="/login">
-              <Button variant="tactileDark" size="lg" className="h-12 px-6">
-                Sign In
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Minimal Technical Footer ── */}
-      <footer className="mt-auto border-t border-slate-200/80 dark:border-white/[0.08] px-6 py-6 text-xs text-slate-500 dark:text-slate-400">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800 dark:text-slate-200">CampusConnect</span>
+        {/* ── Lookap Direct Navigation Footer ── */}
+        <footer className="pt-10 border-t border-white/[0.08] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-[#71717a]">
+          <div className="flex items-center gap-3">
+            <span className="text-[#ededed] font-semibold">CampusConnect</span>
             <span>· Engineered with Lookap Design Intelligence</span>
           </div>
-          <div className="flex items-center gap-4 font-mono text-[11px]">
-            <Link to="/verify/GSA-2026-282742" className="hover:text-blue-500 transition-colors">Verify Credential</Link>
-            <Link to="/student/dashboard" className="hover:text-blue-500 transition-colors">Student Dashboard</Link>
-            <Link to="/login" className="hover:text-blue-500 transition-colors">Portal Login</Link>
+
+          <div className="flex items-center gap-6">
+            <Link to="/student/dashboard" className="hover:text-white transition-colors">
+              Student Dashboard →
+            </Link>
+            <Link to="/login" className="hover:text-white transition-colors">
+              Sign In →
+            </Link>
           </div>
-        </div>
-      </footer>
+        </footer>
+
+      </main>
 
     </div>
   )
