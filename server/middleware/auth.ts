@@ -2,7 +2,16 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { query } from '../db'
 
-const JWT_SECRET = process.env.AUTH_SECRET || 'campusconnect-jwt-secret-key-2026'
+export function getJwtSecret(): string {
+  const secret = process.env.AUTH_SECRET || process.env.JWT_SECRET
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production' && process.env.VERCEL) {
+      console.error('[AUTH ERROR] AUTH_SECRET is not configured in Vercel environment variables!')
+    }
+    return 'campusconnect-jwt-secret-key-2026'
+  }
+  return secret
+}
 
 export interface AuthenticatedUser {
   id: string
@@ -23,7 +32,7 @@ export function generateToken(user: AuthenticatedUser): string {
       role: user.role,
       studentId: user.studentId
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '7d' }
   )
 }
@@ -37,7 +46,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
   const token = authHeader.split(' ')[1]
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthenticatedUser
+    const decoded = jwt.verify(token, getJwtSecret()) as AuthenticatedUser
     req.user = decoded
     next()
   } catch (err) {

@@ -37,9 +37,20 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
+function getAuthSecret(purpose = ''): string {
+  const secret = process.env.AUTH_SECRET || process.env.JWT_SECRET
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production' && process.env.VERCEL) {
+      console.error('[AUTH ERROR] AUTH_SECRET is not configured in Vercel environment variables!')
+    }
+    return 'campusconnect-jwt-secret-key-2026-production' + (purpose ? `:${purpose}` : '')
+  }
+  return secret + (purpose ? `:${purpose}` : '')
+}
+
 // Deterministic 6-digit verification code (valid across stateless Vercel Serverless lambdas for 30-60 min)
 export function getStatelessVerificationCode(email: string, stepOffset = 0): string {
-  const secret = process.env.AUTH_SECRET || 'campusconnect-jwt-secret-key-2026-production'
+  const secret = getAuthSecret('verification')
   const timeStep = Math.floor(Date.now() / (1000 * 60 * 30)) + stepOffset
   const h = crypto
     .createHmac('sha256', secret)
@@ -51,7 +62,7 @@ export function getStatelessVerificationCode(email: string, stepOffset = 0): str
 
 // Deterministic 6-digit login OTP (valid across stateless Vercel Serverless lambdas for 15-30 min)
 export function getStatelessLoginOtp(email: string, stepOffset = 0): string {
-  const secret = (process.env.AUTH_SECRET || 'campusconnect-jwt-secret-key-2026-production') + ':login-otp'
+  const secret = getAuthSecret('login-otp')
   const timeStep = Math.floor(Date.now() / (1000 * 60 * 15)) + stepOffset
   const h = crypto
     .createHmac('sha256', secret)
@@ -314,17 +325,18 @@ router.post('/send-login-otp', async (req: Request, res: Response): Promise<void
   }
 })
 
-// POST /api/auth/login-otp (Authenticate via SMTP OTP)
-router.post('/login-otp', async (req: Request, res: Response): Promise<void> => {
+// POST /api/auth/login-otp & POST /api/auth/verify-login-otp (Authenticate via SMTP OTP)
+router.post(['/login-otp', '/verify-login-otp'], async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, otp } = req.body
-    if (!email || !otp) {
+    const email = req.body?.email
+    const rawOtp = req.body?.otp || req.body?.code
+    if (!email || !rawOtp) {
       res.status(400).json({ error: 'Email and OTP code are required' })
       return
     }
 
-    const normalizedEmail = email.toLowerCase().trim()
-    const submittedOtp = otp.trim()
+    const normalizedEmail = String(email).toLowerCase().trim()
+    const submittedOtp = String(rawOtp).trim()
 
     // 1. Check valid token in email_tokens
     let isValid = false
@@ -338,7 +350,7 @@ router.post('/login-otp', async (req: Request, res: Response): Promise<void> => 
 
       if (tokenRes.rows.length > 0) {
         isValid = true
-        // Mark token as used
+        // Mark token as used immediately to prevent replay
         await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id]).catch(() => {})
       }
     } catch (e) {
@@ -347,10 +359,24 @@ router.post('/login-otp', async (req: Request, res: Response): Promise<void> => 
 
     // 2. Stateless HMAC fallback (critical when Vercel serverless containers cold-start between send and verify)
     if (!isValid) {
-      const currentOtp = getStatelessLoginOtp(normalizedEmail, 0)
-      const prevOtp = getStatelessLoginOtp(normalizedEmail, -1) // 15-minute grace window
-      if (submittedOtp === currentOtp || submittedOtp === prevOtp) {
-        isValid = true
+      // Check if this token was already marked as used
+      const alreadyUsed = await query(
+        `SELECT id FROM email_tokens WHERE LOWER(email) = LOWER($1) AND token = $2 AND used = true LIMIT 1`,
+        [normalizedEmail, submittedOtp]
+      ).catch(() => ({ rows: [] }))
+
+      if (alreadyUsed.rows.length === 0) {
+        const currentOtp = getStatelessLoginOtp(normalizedEmail, 0)
+        const prevOtp = getStatelessLoginOtp(normalizedEmail, -1) // 15-minute grace window
+        if (submittedOtp === currentOtp || submittedOtp === prevOtp) {
+          isValid = true
+          // Mark as used in database to prevent reuse
+          await query(
+            `INSERT INTO email_tokens (email, token, type, used, expires_at)
+             VALUES ($1, $2, 'login_otp', true, CURRENT_TIMESTAMP + INTERVAL '15 minutes')`,
+            [normalizedEmail, submittedOtp]
+          ).catch(() => {})
+        }
       }
     }
 

@@ -87,12 +87,19 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' })
 })
 
-// Auto-start server in local development
+// Auto-start server in local development (strictly disabled in Vercel serverless environments)
+const isServerless = !!(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.VERCEL_ENV
+)
+
 async function start() {
   try {
     await ensureInitialized()
 
-    if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+    if (process.env.NODE_ENV !== 'test' && !isServerless) {
       app.listen(PORT, () => {
         console.log(`🚀 CampusConnect API server running at http://localhost:${PORT}`)
       })
@@ -102,6 +109,8 @@ async function start() {
   }
 }
 
-start()
+if (!isServerless) {
+  start()
+}
 
 export default app
