@@ -19,16 +19,22 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Request logger & Vercel path normalizer
+// Request logger
 app.use((req, _res, next) => {
-  const matched = req.headers['x-matched-path'] as string
-  if (matched && matched.startsWith('/api') && req.url !== matched) {
-    req.url = matched
-  }
-  if (!req.path.startsWith('/api/health')) {
-    console.log(`[API] ${req.method} ${req.path}`)
+  if (!req.path.startsWith('/api/health') && !req.path.startsWith('/health')) {
+    console.log(`[API] ${req.method} ${req.originalUrl || req.url || req.path}`)
   }
   next()
+})
+
+// Public Health Check
+app.get(['/api/health', '/health'], (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'CampusConnect API',
+    timestamp: new Date().toISOString(),
+    isVercel: !!process.env.VERCEL
+  })
 })
 
 // Ensure DB migrations & seed run before handling any request (critical for Vercel serverless cold starts)

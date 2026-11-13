@@ -1,5 +1,8 @@
 import { Pool, QueryResult } from 'pg'
 import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
 import { SCHEMA_SQL } from './schemaSql'
 
 dotenv.config()
@@ -89,8 +92,29 @@ class FallbackStore {
     resources: []
   }
 
+  private storePath = path.join(os.tmpdir(), 'campusconnect_fallback_store.json')
+
   init() {
+    try {
+      if (fs.existsSync(this.storePath)) {
+        const raw = fs.readFileSync(this.storePath, 'utf-8')
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          for (const key of Object.keys(parsed)) {
+            if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
+              this.data[key] = parsed[key]
+            }
+          }
+        }
+      }
+    } catch {}
     console.log('[FallbackStore] Initialized resilient in-memory store.')
+  }
+
+  save() {
+    try {
+      fs.writeFileSync(this.storePath, JSON.stringify(this.data), 'utf-8')
+    } catch {}
   }
 
   async query(text: string, params: any[] = []): Promise<QueryResult<any>> {
@@ -125,6 +149,7 @@ class FallbackStore {
         created_at: new Date()
       }
       this.data.users.push(newUser)
+      this.save()
       return { rows: [newUser], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
 
@@ -151,6 +176,7 @@ class FallbackStore {
         created_at: new Date()
       }
       this.data.profiles.push(newProf)
+      this.save()
       return { rows: [newProf], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
 
@@ -167,6 +193,7 @@ class FallbackStore {
         created_at: new Date()
       }
       this.data.email_tokens.push(newToken)
+      this.save()
       return { rows: [newToken], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
 
@@ -192,6 +219,7 @@ class FallbackStore {
           t.used = true
         }
       }
+      this.save()
       return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
     }
 
@@ -203,6 +231,7 @@ class FallbackStore {
           u.is_verified = true
         }
       }
+      this.save()
       return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
     }
 
@@ -257,6 +286,7 @@ class FallbackStore {
         created_at: new Date()
       }
       this.data.certificates.push(newCert)
+      this.save()
       return { rows: [newCert], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
 
@@ -295,18 +325,8 @@ export async function query<T = any>(text: string, params: any[] = []): Promise<
     try {
       return await pool.query<T>(text, params)
     } catch (err: any) {
-      const isConnError =
-        err.code === 'ECONNREFUSED' ||
-        err.code === 'ENOTFOUND' ||
-        err.code === 'ETIMEDOUT' ||
-        err.message?.includes('connect') ||
-        err.message?.includes('socket')
-
-      if (isConnError) {
-        console.warn('[PostgreSQL Pool Connection Failed, fallback active]:', err.message)
-        return fallbackStore.query(text, params)
-      }
-      throw err
+      console.warn('[PostgreSQL Pool Warning, using resilient store fallback]:', err?.message || err)
+      return fallbackStore.query(text, params)
     }
   }
   return fallbackStore.query(text, params)

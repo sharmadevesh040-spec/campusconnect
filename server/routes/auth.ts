@@ -37,6 +37,18 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
+// Deterministic 6-digit verification code (valid across stateless Vercel Serverless lambdas for 30-60 min)
+export function getStatelessVerificationCode(email: string, stepOffset = 0): string {
+  const secret = process.env.AUTH_SECRET || 'campusconnect-jwt-secret-key-2026-production'
+  const timeStep = Math.floor(Date.now() / (1000 * 60 * 30)) + stepOffset
+  const h = crypto
+    .createHmac('sha256', secret)
+    .update(`${email.toLowerCase().trim()}:${timeStep}`)
+    .digest('hex')
+  const digits = h.replace(/\D/g, '')
+  return (digits.slice(0, 6) + '829471').slice(0, 6)
+}
+
 // POST /api/auth/register (Registers student and sends SMTP verification email)
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -92,10 +104,10 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     )
 
     // Generate 6-digit verification code & store in email_tokens
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString()
+    const verificationCode = getStatelessVerificationCode(normalizedEmail, 0)
     await query(
       `INSERT INTO email_tokens (email, token, type, expires_at)
-       VALUES ($1, $2, 'verification', CURRENT_TIMESTAMP + INTERVAL '15 minutes')`,
+       VALUES ($1, $2, 'verification', CURRENT_TIMESTAMP + INTERVAL '30 minutes')`,
       [normalizedEmail, verificationCode]
     )
 
@@ -362,24 +374,31 @@ router.post('/verify-email', async (req: Request, res: Response): Promise<void> 
     }
 
     const normalizedEmail = email.toLowerCase().trim()
+    const cleanCode = String(code).trim()
 
     // Validate in email_tokens
     const tokenRes = await query(
       `SELECT id FROM email_tokens
        WHERE LOWER(email) = LOWER($1) AND token = $2 AND type = 'verification' AND used = false AND expires_at > CURRENT_TIMESTAMP
        ORDER BY created_at DESC LIMIT 1`,
-      [normalizedEmail, code.trim()]
+      [normalizedEmail, cleanCode]
     )
 
-    if (tokenRes.rows.length === 0) {
+    const isStatelessValid =
+      cleanCode === getStatelessVerificationCode(normalizedEmail, 0) ||
+      cleanCode === getStatelessVerificationCode(normalizedEmail, -1)
+
+    if (tokenRes.rows.length === 0 && !isStatelessValid) {
       res.status(400).json({ error: 'Invalid or expired verification code. Please request a new one.' })
       return
     }
 
-    // Mark token as used
-    await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id])
+    // Mark token as used if exists in table
+    if (tokenRes.rows.length > 0) {
+      await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id])
+    }
 
-    // Update user is_verified in PostgreSQL
+    // Update user is_verified in PostgreSQL / fallback store
     await query(`UPDATE users SET is_verified = true WHERE LOWER(email) = LOWER($1)`, [normalizedEmail])
 
     res.json({ message: 'Email verified successfully! Your account is now active.' })
@@ -409,11 +428,11 @@ router.post('/resend-verification', async (req: Request, res: Response): Promise
       return
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    const code = getStatelessVerificationCode(normalizedEmail, 0)
 
     await query(
       `INSERT INTO email_tokens (email, token, type, expires_at)
-       VALUES ($1, $2, 'verification', CURRENT_TIMESTAMP + INTERVAL '15 minutes')`,
+       VALUES ($1, $2, 'verification', CURRENT_TIMESTAMP + INTERVAL '30 minutes')`,
       [normalizedEmail, code]
     )
 

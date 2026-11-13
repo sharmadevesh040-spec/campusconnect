@@ -60,15 +60,17 @@ export async function seedDatabase() {
     }
   ]
 
-  // Populate Fallback Store
-  fallbackStore.data.users = defaultUsers
-  fallbackStore.data.profiles = defaultUsers.map(u => ({ ...u.profile, user_id: u.id }))
-  fallbackStore.data.interviews = defaultInterviews
-  fallbackStore.data.certificates = defaultCertificates
-  fallbackStore.data.events = defaultEvents
-  fallbackStore.data.tasks = defaultTasks
-  fallbackStore.data.announcements = defaultAnnouncements
-  fallbackStore.data.resources = defaultResources
+  // Safely seed Fallback Store without wiping registered users
+  for (const u of defaultUsers) {
+    const idx = fallbackStore.data.users.findIndex(existing => existing.email === u.email)
+    if (idx === -1) {
+      fallbackStore.data.users.push(u)
+      fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: 'prof-' + u.id })
+    }
+  }
+  if (!fallbackStore.data.resources || fallbackStore.data.resources.length === 0) {
+    fallbackStore.data.resources = defaultResources
+  }
 
   // If connected to PostgreSQL, insert records
   try {
@@ -76,7 +78,7 @@ export async function seedDatabase() {
       await query(
         `INSERT INTO users (id, email, password_hash, role, is_verified)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role`,
+         ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, password_hash = EXCLUDED.password_hash, is_verified = true`,
         [u.id, u.email, u.password_hash, u.role, u.is_verified]
       )
       await query(

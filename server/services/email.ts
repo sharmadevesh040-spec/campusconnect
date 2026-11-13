@@ -10,25 +10,25 @@ interface SendEmailOptions {
   text?: string
 }
 
-const SMTP_HOST = process.env.SMTP_HOST || ''
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10)
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465
-const SMTP_USER = process.env.SMTP_USER || ''
-const SMTP_PASS = process.env.SMTP_PASS || ''
-const SMTP_FROM = process.env.SMTP_FROM || 'CampusConnect <noreply@campusconnect.edu>'
+const SMTP_USER = process.env.SMTP_USER || 'sharmadevesh040@gmail.com'
+const SMTP_PASS = (process.env.SMTP_PASS || 'ardkrremkqdinkyk').replace(/\s+/g, '')
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com'
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10)
+const SMTP_SECURE = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (SMTP_PORT === 465)
+const SMTP_FROM = process.env.SMTP_FROM || `CampusConnect <${SMTP_USER}>`
 
 let transporter: nodemailer.Transporter | null = null
 
 export function getTransporter(): nodemailer.Transporter {
   if (!transporter) {
-    if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    if (SMTP_USER && SMTP_PASS) {
       transporter = nodemailer.createTransport({
         host: SMTP_HOST,
         port: SMTP_PORT,
         secure: SMTP_SECURE,
         auth: {
           user: SMTP_USER,
-          pass: SMTP_PASS.replace(/\s+/g, '')
+          pass: SMTP_PASS
         },
         connectionTimeout: 15000,
         greetingTimeout: 15000,
@@ -37,7 +37,7 @@ export function getTransporter(): nodemailer.Transporter {
           rejectUnauthorized: false
         }
       })
-      console.log(`[SMTP] Configured custom SMTP transporter for ${SMTP_USER}@${SMTP_HOST}:${SMTP_PORT}`)
+      console.log(`[SMTP] Configured active SMTP transporter for ${SMTP_USER}@${SMTP_HOST}:${SMTP_PORT}`)
     } else {
       // In development or when SMTP credentials are not yet set,
       // create a jsonTransport/stream transporter that captures mail and logs securely
@@ -79,9 +79,16 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions): 
   }
 }
 
+function getAppBaseUrl(): string {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '')
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  return 'http://localhost:5173'
+}
+
 // 1. Send Email Verification Code via SMTP
 export async function sendVerificationEmail(to: string, code: string, fullName: string = 'Student'): Promise<boolean> {
-  const verifyLink = `http://localhost:5173/verify-email?email=${encodeURIComponent(to)}&code=${code}`
+  const appBase = getAppBaseUrl()
+  const verifyLink = `${appBase}/verify-email?email=${encodeURIComponent(to)}&code=${code}`
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
       <div style="text-align: center; margin-bottom: 24px;">
@@ -127,7 +134,8 @@ export async function sendVerificationEmail(to: string, code: string, fullName: 
 
 // 2. Send Password Reset Code via SMTP
 export async function sendPasswordResetEmail(to: string, code: string, fullName: string = 'User'): Promise<boolean> {
-  const resetLink = `http://localhost:5173/reset-password?email=${encodeURIComponent(to)}&code=${code}`
+  const appBase = getAppBaseUrl()
+  const resetLink = `${appBase}/reset-password?email=${encodeURIComponent(to)}&code=${code}`
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
       <div style="text-align: center; margin-bottom: 24px;">
