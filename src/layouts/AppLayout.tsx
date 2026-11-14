@@ -3,7 +3,6 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { Header } from '@/components/layout/Header'
-import { PWAInstallBanner } from '@/components/common/PWAInstallBanner'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { NotificationPermissionPrompt } from '@/components/common/NotificationPermissionPrompt'
 import { SearchPalette } from '@/components/common/SearchPalette'
@@ -65,8 +64,7 @@ export default function AppLayout() {
       {/* Mobile bottom nav */}
       <MobileNav />
 
-      {/* PWA prompts */}
-      <PWAInstallBanner />
+      {/* Prompts */}
       <NotificationPermissionPrompt />
     </div>
   )
