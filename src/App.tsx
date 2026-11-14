@@ -14,27 +14,18 @@ import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import VerifyEmailPage from '@/pages/auth/VerifyEmailPage'
 
 import DashboardPage from '@/pages/student/DashboardPage'
-import InterviewsPage from '@/pages/student/InterviewsPage'
-import InterviewDetailPage from '@/pages/student/InterviewDetailPage'
-import InterviewPrepPage from '@/pages/student/InterviewPrepPage'
 import CertificatesPage from '@/pages/student/CertificatesPage'
 import EventsPage from '@/pages/student/EventsPage'
 import EventDetailPage from '@/pages/student/EventDetailPage'
-import TasksPage from '@/pages/student/TasksPage'
-import AnnouncementsPage from '@/pages/student/AnnouncementsPage'
 import ResourcesPage from '@/pages/student/ResourcesPage'
-import CalendarPage from '@/pages/student/CalendarPage'
 import ProfilePage from '@/pages/student/ProfilePage'
 import NotificationsPage from '@/pages/student/NotificationsPage'
 
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
 import AdminAnalyticsPage from '@/pages/admin/AdminAnalyticsPage'
 import AdminStudentsPage from '@/pages/admin/AdminStudentsPage'
-import AdminInterviewsPage from '@/pages/admin/AdminInterviewsPage'
 import AdminCertificatesPage from '@/pages/admin/AdminCertificatesPage'
 import AdminEventsPage from '@/pages/admin/AdminEventsPage'
-import AdminTasksPage from '@/pages/admin/AdminTasksPage'
-import AdminAnnouncementsPage from '@/pages/admin/AdminAnnouncementsPage'
 import AdminResourcesPage from '@/pages/admin/AdminResourcesPage'
 import AdminAdminsPage from '@/pages/admin/AdminAdminsPage'
 import AdminAuditLogsPage from '@/pages/admin/AdminAuditLogsPage'
@@ -110,14 +101,6 @@ export default function App() {
         <Route path="/student/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
 
-        <Route path="/student/interviews" element={<InterviewsPage />} />
-        <Route path="/interviews" element={<Navigate to="/student/interviews" replace />} />
-
-        <Route path="/student/interviews/:id" element={<InterviewDetailPage />} />
-        <Route path="/interviews/:id" element={<InterviewDetailPage />} />
-
-        <Route path="/student/interview-prep" element={<InterviewPrepPage />} />
-
         <Route path="/student/certificates" element={<CertificatesPage />} />
         <Route path="/certificates" element={<Navigate to="/student/certificates" replace />} />
 
@@ -127,23 +110,27 @@ export default function App() {
         <Route path="/student/events/:id" element={<EventDetailPage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
 
-        <Route path="/student/tasks" element={<TasksPage />} />
-        <Route path="/tasks" element={<Navigate to="/student/tasks" replace />} />
-
-        <Route path="/student/announcements" element={<AnnouncementsPage />} />
-        <Route path="/announcements" element={<Navigate to="/student/announcements" replace />} />
-
         <Route path="/student/resources" element={<ResourcesPage />} />
         <Route path="/resources" element={<Navigate to="/student/resources" replace />} />
-
-        <Route path="/student/calendar" element={<CalendarPage />} />
-        <Route path="/calendar" element={<Navigate to="/student/calendar" replace />} />
 
         <Route path="/student/profile" element={<ProfilePage />} />
         <Route path="/profile" element={<Navigate to="/student/profile" replace />} />
 
         <Route path="/student/notifications" element={<NotificationsPage />} />
         <Route path="/notifications" element={<Navigate to="/student/notifications" replace />} />
+
+        {/* Removed feature redirects to avoid dead links */}
+        <Route path="/student/calendar" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/calendar" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/student/interviews" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/student/interviews/*" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/interviews" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/interviews/*" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/student/interview-prep" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/student/tasks" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/tasks" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/student/announcements" element={<Navigate to="/student/dashboard" replace />} />
+        <Route path="/announcements" element={<Navigate to="/student/dashboard" replace />} />
       </Route>
 
       {/* Admin Panel Routes */}
@@ -151,14 +138,16 @@ export default function App() {
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
         <Route path="/admin/students" element={<AdminStudentsPage />} />
-        <Route path="/admin/interviews" element={<AdminInterviewsPage />} />
         <Route path="/admin/certificates" element={<AdminCertificatesPage />} />
         <Route path="/admin/events" element={<AdminEventsPage />} />
-        <Route path="/admin/tasks" element={<AdminTasksPage />} />
-        <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
         <Route path="/admin/resources" element={<AdminResourcesPage />} />
         <Route path="/admin/admins" element={<AdminAdminsPage />} />
         <Route path="/admin/audit-logs" element={<AdminAuditLogsPage />} />
+
+        {/* Removed admin feature redirects */}
+        <Route path="/admin/interviews" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/tasks" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/announcements" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

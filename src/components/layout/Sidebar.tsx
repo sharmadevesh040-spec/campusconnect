@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  X, GraduationCap, LayoutDashboard, Calendar, Mic2, CalendarDays,
-  CheckSquare, Award, BookOpen, Bell, User, LogOut, Settings, Shield, Sparkles
+  X, GraduationCap, LayoutDashboard, CalendarDays,
+  Award, BookOpen, User, LogOut, Settings, Shield
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -10,14 +10,9 @@ import { cn } from '@/lib/utils'
 
 const STUDENT_NAV = [
   { to: '/student/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/student/calendar', icon: Calendar, label: 'Calendar' },
-  { to: '/student/interviews', icon: Mic2, label: 'Interviews' },
-  { to: '/student/interview-prep', icon: Sparkles, label: 'Interview Guide' },
-  { to: '/student/events', icon: CalendarDays, label: 'Events' },
-  { to: '/student/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/student/certificates', icon: Award, label: 'Certificates' },
+  { to: '/student/events', icon: CalendarDays, label: 'Events' },
   { to: '/student/resources', icon: BookOpen, label: 'Resources' },
-  { to: '/student/announcements', icon: Bell, label: 'Announcements' },
 ]
 
 interface SidebarProps {

@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, X, Calendar, Award, Mic, FileText, Bell, BookOpen } from 'lucide-react'
+import { Search, X, Award, CalendarDays, BookOpen, LayoutDashboard, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
 const QUICK_LINKS = [
-  { icon: <Calendar className="w-4 h-4" />, label: 'My Calendar', path: '/calendar', category: 'Pages' },
-  { icon: <Award className="w-4 h-4" />, label: 'My Certificates', path: '/certificates', category: 'Pages' },
-  { icon: <Mic className="w-4 h-4" />, label: 'My Interviews', path: '/interviews', category: 'Pages' },
-  { icon: <FileText className="w-4 h-4" />, label: 'My Tasks', path: '/tasks', category: 'Pages' },
-  { icon: <Bell className="w-4 h-4" />, label: 'Announcements', path: '/announcements', category: 'Pages' },
-  { icon: <BookOpen className="w-4 h-4" />, label: 'Resources', path: '/resources', category: 'Pages' },
+  { icon: <LayoutDashboard className="w-4 h-4" />, label: 'Dashboard', path: '/student/dashboard', category: 'Pages' },
+  { icon: <Award className="w-4 h-4" />, label: 'My Certificates', path: '/student/certificates', category: 'Pages' },
+  { icon: <CalendarDays className="w-4 h-4" />, label: 'Campus Events', path: '/student/events', category: 'Pages' },
+  { icon: <BookOpen className="w-4 h-4" />, label: 'Resources', path: '/student/resources', category: 'Pages' },
+  { icon: <User className="w-4 h-4" />, label: 'My Profile', path: '/student/profile', category: 'Pages' },
 ]
 
 interface SearchPaletteProps {

@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Calendar, CheckSquare, Award, User } from 'lucide-react'
+import { Home, Award, CalendarDays, BookOpen, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV = [
   { to: '/student/dashboard', icon: Home, label: 'Home' },
-  { to: '/student/calendar', icon: Calendar, label: 'Calendar' },
-  { to: '/student/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/student/certificates', icon: Award, label: 'Certs' },
+  { to: '/student/events', icon: CalendarDays, label: 'Events' },
+  { to: '/student/resources', icon: BookOpen, label: 'Resources' },
   { to: '/student/profile', icon: User, label: 'Profile' },
 ]
 

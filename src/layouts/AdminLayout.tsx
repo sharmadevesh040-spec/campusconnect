@@ -1,6 +1,6 @@
 import { Outlet, NavLink, Navigate } from 'react-router-dom'
 import {
-  Users, Calendar, Award, CalendarDays, CheckSquare, Bell,
+  Users, Award, CalendarDays,
   LayoutDashboard, GraduationCap, LogOut, BarChart3, BookOpen,
   ShieldAlert, Activity, ArrowLeft, ShieldCheck, Shield
 } from 'lucide-react'
@@ -13,11 +13,8 @@ const NAV = [
   { to: '/admin/dashboard', icon: <LayoutDashboard className="w-4 h-4" />, label: 'Dashboard' },
   { to: '/admin/analytics', icon: <BarChart3 className="w-4 h-4" />, label: 'Analytics' },
   { to: '/admin/students', icon: <Users className="w-4 h-4" />, label: 'Students' },
-  { to: '/admin/interviews', icon: <Calendar className="w-4 h-4" />, label: 'Interviews' },
   { to: '/admin/certificates', icon: <Award className="w-4 h-4" />, label: 'Certificates' },
   { to: '/admin/events', icon: <CalendarDays className="w-4 h-4" />, label: 'Events' },
-  { to: '/admin/tasks', icon: <CheckSquare className="w-4 h-4" />, label: 'Tasks' },
-  { to: '/admin/announcements', icon: <Bell className="w-4 h-4" />, label: 'Announcements' },
   { to: '/admin/resources', icon: <BookOpen className="w-4 h-4" />, label: 'Resources' },
   { to: '/admin/admins', icon: <ShieldAlert className="w-4 h-4" />, label: 'Admins' },
   { to: '/admin/audit-logs', icon: <Activity className="w-4 h-4" />, label: 'Audit Logs' },

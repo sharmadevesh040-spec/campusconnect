@@ -1,27 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CalendarDays, CheckSquare, Award, Bell, Clock, MapPin, Video,
-  ChevronRight, Mic2, Eye, Download, ShieldCheck, Sparkles,
-  ArrowUpRight, Target, Activity, Users, BookOpen
+  CalendarDays, Award, ShieldCheck, Sparkles, Eye, Download,
+  ChevronRight, BookOpen, ArrowUpRight, GraduationCap
 } from 'lucide-react'
-import { safeTime, safeFormatDate, safeGetInterviewDate } from '@/lib/dateUtils'
+import { safeTime, safeFormatDate } from '@/lib/dateUtils'
 import { useAuth } from '@/hooks/useAuth'
-import { useInterviews } from '@/hooks/useInterviews'
-import { useTasks } from '@/hooks/useTasks'
 import { useEvents } from '@/hooks/useEvents'
 import { useCertificates } from '@/hooks/useCertificates'
-import { useAnnouncements } from '@/hooks/useAnnouncements'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
-import { CountdownTimer } from '@/components/common/CountdownTimer'
 import { TactileIdVault } from '@/components/dashboard/TactileIdVault'
-import { InterviewStatus } from '@/types/interview'
-import { TaskStatus } from '@/types/task'
 import { EventStatus } from '@/types/event'
 import { getCertificateViewBlobUrl } from '@/services/certificateService'
 import { toast } from 'sonner'
@@ -35,13 +28,10 @@ function getGreeting() {
 
 export default function DashboardPage() {
   const { userProfile } = useAuth()
-  const { interviews, loading: iLoading } = useInterviews()
-  const { tasks, loading: tLoading } = useTasks()
   const { events, loading: eLoading } = useEvents()
   const { certificates, loading: cLoading, downloadCertificate } = useCertificates()
-  const { announcements, loading: aLoading } = useAnnouncements()
 
-  const [activeTab, setActiveTab] = useState<'all' | 'schedule' | 'tasks' | 'credentials' | 'idcard'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'credentials' | 'events' | 'idcard'>('all')
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
   const [previewCert, setPreviewCert] = useState<any | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -49,55 +39,42 @@ export default function DashboardPage() {
   const firstName = userProfile?.fullName?.split(' ')[0] || 'Student'
   const userRole = userProfile?.role || 'Campus Fellow'
 
-  const now = Date.now()
-  const upcomingInterviews = (interviews || []).filter(i =>
-    [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED].includes(i.status) && safeTime(i.date) > now
-  ).sort((a, b) => safeTime(a.date) - safeTime(b.date))
-
-  const pendingTasks = (tasks || []).filter(t => t.status === TaskStatus.PENDING || t.status === TaskStatus.IN_PROGRESS)
-    .sort((a, b) => safeTime(a.deadline) - safeTime(b.deadline))
-
-  const completedTasks = (tasks || []).filter(t => t.status === TaskStatus.COMPLETED)
-  const taskCompletionRate = (tasks && tasks.length > 0) ? Math.round((completedTasks.length / tasks.length) * 100) : 100
-
-  const upcomingEvents = (events || []).filter(e =>
-    e.status === EventStatus.OPEN || e.status === EventStatus.ALMOST_FULL
-  ).sort((a, b) => safeTime(a.date) - safeTime(b.date))
-
-  const nextInterview = upcomingInterviews[0]
+  const upcomingEvents = (events || [])
+    .filter(e => e.status === EventStatus.OPEN || e.status === EventStatus.ALMOST_FULL)
+    .sort((a, b) => safeTime(a.date) - safeTime(b.date))
 
   const stats = [
-    {
-      label: 'Upcoming Interviews',
-      value: upcomingInterviews.length,
-      icon: Mic2,
-      subtext: nextInterview ? `Next: ${safeFormatDate(nextInterview.date, 'p')}` : 'All caught up',
-      dot: 'spec-dot-indigo',
-      link: '/interviews'
-    },
-    {
-      label: 'Pending Tasks',
-      value: pendingTasks.length,
-      icon: CheckSquare,
-      subtext: `${taskCompletionRate}% completed`,
-      dot: 'spec-dot-amber',
-      link: '/tasks'
-    },
-    {
-      label: 'Campus Events',
-      value: upcomingEvents.length,
-      icon: CalendarDays,
-      subtext: 'Registration open',
-      dot: 'spec-dot-emerald',
-      link: '/events'
-    },
     {
       label: 'Verified Credentials',
       value: certificates.length,
       icon: Award,
       subtext: 'SHA-256 tamper-proof',
       dot: 'spec-dot-emerald',
-      link: '/certificates'
+      link: '/student/certificates'
+    },
+    {
+      label: 'Campus Events',
+      value: upcomingEvents.length,
+      icon: CalendarDays,
+      subtext: 'Registration open',
+      dot: 'spec-dot-indigo',
+      link: '/student/events'
+    },
+    {
+      label: 'Digital Student ID',
+      value: 'ACTIVE',
+      icon: ShieldCheck,
+      subtext: userProfile?.studentId || 'GSA-2026-999',
+      dot: 'spec-dot-emerald',
+      link: '/student/profile'
+    },
+    {
+      label: 'Profile Completion',
+      value: `${userProfile?.completionPercentage || 85}%`,
+      icon: Sparkles,
+      subtext: `${userProfile?.course || 'B.Tech'} · Year ${userProfile?.year || 1}`,
+      dot: 'spec-dot-amber',
+      link: '/student/profile'
     },
   ]
 
@@ -133,13 +110,11 @@ export default function DashboardPage() {
     <div className="max-w-6xl mx-auto space-y-7 pb-16 animate-fade-in">
       {/* ── Lookap Obsidian Blueprint Hero ── */}
       <div className="relative overflow-hidden rounded-3xl bg-[#0c0d12] border border-white/10 p-6 md:p-8 text-white shadow-[0_12px_40px_-10px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.15)]">
-        {/* Subtle radial ambient lighting */}
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3 max-w-2xl">
-            {/* Live Status Pill & Spec Tags */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/15 text-[11px] font-mono tracking-wide text-slate-200">
                 <span className="spec-dot-emerald" /> LIVE CAMPUS RADAR
@@ -154,25 +129,20 @@ export default function DashboardPage() {
                 <span className="text-slate-400 font-normal text-lg hidden sm:inline">· {userRole}</span>
               </h1>
               <p className="text-slate-300 text-sm mt-1 leading-relaxed">
-                {upcomingInterviews.length > 0
-                  ? `Your next interview starts at ${safeFormatDate(nextInterview?.date, 'p')}. Make sure you're ready with meeting links & notes.`
-                  : pendingTasks.length > 0
-                  ? `You have ${pendingTasks.length} pending academic & program task${pendingTasks.length > 1 ? 's' : ''} to complete this week.`
-                  : 'Welcome back! All your student program resources, interviews, and verified credentials are up to date.'}
+                Welcome to your student hub. Access your verified certificates, view upcoming campus summits, and verify your digital identity badge.
               </p>
             </div>
           </div>
 
-          {/* Quick Action Convex Buttons */}
           <div className="flex sm:flex-col lg:flex-row gap-2.5 flex-shrink-0">
-            <Link to="/tasks">
-              <Button variant="tactile" size="sm" className="w-full text-xs font-semibold" leftIcon={<CheckSquare className="w-3.5 h-3.5" />}>
-                View Task Queue
+            <Link to="/student/certificates">
+              <Button variant="tactile" size="sm" className="w-full text-xs font-semibold" leftIcon={<Award className="w-3.5 h-3.5" />}>
+                My Certificates
               </Button>
             </Link>
-            <Link to="/interviews">
-              <Button variant="tactileDark" size="sm" className="w-full text-xs" leftIcon={<Mic2 className="w-3.5 h-3.5" />}>
-                Mock Prep
+            <Link to="/student/events">
+              <Button variant="tactileDark" size="sm" className="w-full text-xs" leftIcon={<CalendarDays className="w-3.5 h-3.5" />}>
+                Campus Events
               </Button>
             </Link>
           </div>
@@ -210,27 +180,7 @@ export default function DashboardPage() {
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          All Activity
-        </button>
-        <button
-          onClick={() => setActiveTab('schedule')}
-          className={`px-3.5 py-1.5 rounded-lg transition-all ${
-            activeTab === 'schedule'
-              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          Schedule ({upcomingInterviews.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('tasks')}
-          className={`px-3.5 py-1.5 rounded-lg transition-all ${
-            activeTab === 'tasks'
-              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          Tasks ({pendingTasks.length})
+          All Overview
         </button>
         <button
           onClick={() => setActiveTab('credentials')}
@@ -241,6 +191,16 @@ export default function DashboardPage() {
           }`}
         >
           Credentials ({certificates.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('events')}
+          className={`px-3.5 py-1.5 rounded-lg transition-all ${
+            activeTab === 'events'
+              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          Events ({upcomingEvents.length})
         </button>
         <button
           onClick={() => setActiveTab('idcard')}
@@ -254,104 +214,6 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* ── Primary Operational Grid ── */}
-      {(activeTab === 'all' || activeTab === 'schedule' || activeTab === 'tasks') && (
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Next Interview / Meeting Widget */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Mic2 className="w-4 h-4 text-blue-500" />
-                Live Interview Radar
-              </h2>
-              <Link to="/interviews" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
-                View all <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {iLoading ? (
-              <SkeletonCard />
-            ) : nextInterview ? (
-              <Link to={`/interviews/${nextInterview.id}`}>
-                <div className="lookap-card p-5 group hover:border-blue-400/40 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="spec-dot-indigo" />
-                      <Badge variant={nextInterview.status === InterviewStatus.CONFIRMED ? 'success' : 'primary'}>
-                        {nextInterview.status}
-                      </Badge>
-                    </div>
-                    <span className="spec-tag">{safeGetInterviewDate(nextInterview.date)}</span>
-                  </div>
-
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base mb-1 group-hover:text-blue-500 transition-colors">
-                    {nextInterview.title}
-                  </h3>
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-3">{nextInterview.organization}</p>
-
-                  <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 mb-4 font-mono">
-                    <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-blue-500" />{nextInterview.time}</span>
-                    <span className="flex items-center gap-1.5">
-                      {nextInterview.meetingLink ? <Video className="w-3.5 h-3.5 text-emerald-500" /> : <MapPin className="w-3.5 h-3.5 text-purple-500" />}
-                      {nextInterview.interviewType}
-                    </span>
-                  </div>
-
-                  {/* Lookap Blueprint Inset Recess for Countdown */}
-                  <div className="lookap-recess p-3.5 flex items-center justify-between">
-                    <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                      TIME TO START:
-                    </div>
-                    <CountdownTimer targetDate={nextInterview.date} />
-                  </div>
-                </div>
-              </Link>
-            ) : (
-              <Card className="p-6">
-                <EmptyState emoji="🎓" title="No interviews scheduled" description="You currently don't have any upcoming mock or program interviews." />
-              </Card>
-            )}
-          </div>
-
-          {/* Pending Tasks Pipeline */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <CheckSquare className="w-4 h-4 text-amber-500" />
-                Priority Task Pipeline
-              </h2>
-              <Link to="/tasks" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
-                View all ({pendingTasks.length}) <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {tLoading ? (
-              <SkeletonCard />
-            ) : pendingTasks.length === 0 ? (
-              <Card className="p-6"><EmptyState emoji="✅" title="All caught up!" description="No pending tasks right now." /></Card>
-            ) : (
-              <div className="lookap-card divide-y divide-slate-100 dark:divide-white/[0.06] overflow-hidden">
-                {pendingTasks.slice(0, 4).map(task => (
-                  <div key={task.id} className="p-4 flex items-center gap-3.5 hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors">
-                    <span className={task.priority === 'high' ? 'spec-dot-amber' : 'inline-block w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600'} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="spec-tag text-[9px] py-0 px-1.5">DUE: {safeFormatDate(task.deadline, 'dd MMM')}</span>
-                        <span className="text-[11px] font-mono text-slate-400 uppercase">{task.priority} PRIORITY</span>
-                      </div>
-                    </div>
-                    <Badge variant={task.status === TaskStatus.IN_PROGRESS ? 'info' : 'warning'} className="flex-shrink-0 text-[10px]">
-                      {task.status === TaskStatus.IN_PROGRESS ? 'In Progress' : 'Pending'}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Lookap Verified Credentials & Certificates Showcase ── */}
       {(activeTab === 'all' || activeTab === 'credentials') && (
         <div className="space-y-3.5">
@@ -360,7 +222,7 @@ export default function DashboardPage() {
               <Award className="w-4 h-4 text-emerald-500" />
               Cryptographic Credentials & Verified Certificates
             </h2>
-            <Link to="/certificates" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
+            <Link to="/student/certificates" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
               View all ({certificates.length}) <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -379,7 +241,7 @@ export default function DashboardPage() {
             </Card>
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
-              {certificates.slice(0, 2).map(cert => (
+              {certificates.slice(0, 4).map(cert => (
                 <div key={cert.id} className="lookap-card p-5 flex flex-col justify-between relative overflow-hidden">
                   <div>
                     <div className="flex items-start justify-between gap-3 mb-3">
@@ -483,8 +345,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Events & Announcements Radar ── */}
-      {(activeTab === 'all') && (
+      {/* ── Campus Events & Educational Resources Grid ── */}
+      {(activeTab === 'all' || activeTab === 'events') && (
         <div className="grid md:grid-cols-2 gap-6">
           {/* Upcoming Events */}
           <div className="space-y-3">
@@ -493,18 +355,18 @@ export default function DashboardPage() {
                 <CalendarDays className="w-4 h-4 text-purple-500" />
                 Campus Events Radar
               </h2>
-              <Link to="/events" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
+              <Link to="/student/events" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
                 View all <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
             {eLoading ? (
               <SkeletonCard />
             ) : upcomingEvents.length === 0 ? (
-              <Card className="p-6"><EmptyState emoji="🎉" title="No upcoming events" description="Check back soon for new events." /></Card>
+              <Card className="p-6"><EmptyState emoji="🎉" title="No upcoming events" description="Check back soon for new campus summits and workshops." /></Card>
             ) : (
               <div className="space-y-3">
-                {upcomingEvents.slice(0, 2).map(event => (
-                  <Link key={event.id} to={`/events/${event.id}`}>
+                {upcomingEvents.slice(0, 3).map(event => (
+                  <Link key={event.id} to={`/student/events/${event.id}`}>
                     <div className="lookap-card p-4 hover:border-purple-400/30 transition-all flex gap-4">
                       <div className="text-center bg-purple-50 dark:bg-purple-950/40 border border-purple-500/20 rounded-xl px-3 py-2 flex-shrink-0 flex flex-col justify-center">
                         <p className="text-[10px] font-mono uppercase font-bold text-purple-600 dark:text-purple-400">{safeFormatDate(event.date, 'MMM')}</p>
@@ -526,37 +388,51 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Announcements Feed */}
+          {/* Ambassador Resources & Toolkits */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Bell className="w-4 h-4 text-red-500" />
-                Latest Bulletins
+                <BookOpen className="w-4 h-4 text-blue-500" />
+                Ambassador Toolkits & Resources
               </h2>
-              <Link to="/announcements" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
-                View all <ChevronRight className="w-3.5 h-3.5" />
+              <Link to="/student/resources" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
+                Browse Repository <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
-            {aLoading ? (
-              <SkeletonCard />
-            ) : announcements.length === 0 ? (
-              <Card className="p-6"><EmptyState emoji="📢" title="No announcements" description="Important announcements will appear here." /></Card>
-            ) : (
-              <div className="lookap-card divide-y divide-slate-100 dark:divide-white/[0.06] overflow-hidden">
-                {announcements.slice(0, 3).map(a => (
-                  <div key={a.id} className="p-4 flex items-start gap-3 hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors">
-                    {!a.isRead ? <span className="spec-dot-indigo mt-1.5 flex-shrink-0" /> : <div className="w-2" />}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{a.title}</p>
-                      <p className="text-[11px] font-mono text-slate-400 mt-0.5">{safeFormatDate(a.publishedAt || a.createdAt, 'dd MMM yyyy')}</p>
-                    </div>
-                    <Badge variant={a.priority === 'urgent' ? 'danger' : a.priority === 'high' ? 'warning' : 'default'} className="text-[10px]">
-                      {a.priority}
-                    </Badge>
-                  </div>
-                ))}
+            
+            <div className="lookap-card p-5 space-y-4">
+              <div className="flex items-start gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-blue-500/30 transition-all">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center flex-shrink-0">
+                  <GraduationCap className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-semibold text-white">Campus Ambassador Brand & Media Kit</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">High-res vector badges, presentation decks, and campus flyer templates.</p>
+                </div>
+                <Link to="/student/resources">
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 hover:text-white" />
+                </Link>
               </div>
-            )}
+
+              <div className="flex items-start gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-purple-500/30 transition-all">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center flex-shrink-0">
+                  <Award className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-semibold text-white">Official Credential Verification Guide</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">How cryptographic SHA-256 signatures validate your academic credentials.</p>
+                </div>
+                <Link to="/student/resources">
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 hover:text-white" />
+                </Link>
+              </div>
+
+              <Link to="/student/resources">
+                <Button variant="outline" size="sm" className="w-full text-xs mt-1" leftIcon={<BookOpen className="w-3.5 h-3.5" />}>
+                  Explore All Learning Guides
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       )}
