@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CalendarDays, Plus, Calendar, Clock, MapPin, Video, Users, Edit3, Trash2 } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 import {
   getEvents, createEvent, updateEvent, deleteEvent
 } from '@/services/eventService'
@@ -24,7 +24,7 @@ export default function AdminEventsPage() {
   const [formData, setFormData] = useState({
     title: 'University Tech Innovation Showcase',
     description: 'Annual campus expo demonstrating student ambassador community software and hardware projects.',
-    date: format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+    date: safeFormatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
     time: '02:00 PM - 05:00 PM',
     venue: 'Auditorium Hall B & Online Stream',
     meetingLink: 'https://campusconnect.live/expo-2026',
@@ -136,7 +136,7 @@ export default function AdminEventsPage() {
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{event.description}</p>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 pt-1">
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{format(new Date(event.date), 'dd MMM yyyy')}</span>
+                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{safeFormatDate(event.date, 'dd MMM yyyy')}</span>
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{event.time}</span>
                   <span className="flex items-center gap-1">
                     {event.meetingLink ? <Video className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
@@ -160,7 +160,7 @@ export default function AdminEventsPage() {
                     setFormData({
                       title: event.title,
                       description: event.description,
-                      date: format(new Date(event.date), 'yyyy-MM-dd'),
+                      date: safeFormatDate(event.date, 'yyyy-MM-dd'),
                       time: event.time,
                       venue: event.venue,
                       meetingLink: event.meetingLink || '',

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { FileText, Search, RefreshCw, Clock, ShieldCheck, Activity } from 'lucide-react'
 import { apiRequest } from '@/services/api'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 
 export default function AdminAuditLogsPage() {
   const [logs, setLogs] = useState<any[]>([])
@@ -120,7 +120,7 @@ export default function AdminAuditLogsPage() {
                   <td className="py-3 px-4 font-mono text-slate-500">{log.resource_id || '—'}</td>
                   <td className="py-3 px-4 text-slate-400 font-mono">{log.ip_address || '127.0.0.1'}</td>
                   <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
-                    {format(new Date(log.created_at || Date.now()), 'dd MMM yyyy, HH:mm')}
+                    {safeFormatDate(log.created_at || Date.now(), 'dd MMM yyyy, HH:mm')}
                   </td>
                 </tr>
               ))}

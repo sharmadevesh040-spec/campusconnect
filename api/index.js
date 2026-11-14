@@ -1709,7 +1709,7 @@ var auth_default = router;
 
 // server/routes/student.ts
 import { Router as Router2 } from "express";
-import fs3 from "fs";
+import fs4 from "fs";
 
 // server/storage/pdfGenerator.ts
 function generateCertificatePdfBuffer(cert) {
@@ -1861,6 +1861,7 @@ ${400 + streamLength}
 }
 
 // server/mcp/certificateTools.ts
+import fs3 from "fs";
 import crypto3 from "crypto";
 
 // server/storage/index.ts
@@ -2216,6 +2217,14 @@ async function getCertificateTool(params) {
   const fileKey = cert.file_key || `certificates/${cert.certificate_id}.pdf`;
   const physicalPath = getFilePath(fileKey) || cert.file_path;
   const signedUrl = generateSignedDownloadUrl(fileKey, cert.student_id);
+  let fileBase64;
+  if (physicalPath && fs3.existsSync(physicalPath)) {
+    try {
+      fileBase64 = fs3.readFileSync(physicalPath).toString("base64");
+    } catch (e) {
+      console.warn("[MCP getCertificateTool] Unable to read physical file for base64:", e);
+    }
+  }
   await logAudit(
     caller_user_id,
     "CERTIFICATE_VIEWED",
@@ -2226,6 +2235,7 @@ async function getCertificateTool(params) {
   return {
     success: true,
     statusCode: 200,
+    file_base64: fileBase64,
     certificate: {
       id: cert.id,
       certificate_id: cert.certificate_id,
@@ -2240,7 +2250,8 @@ async function getCertificateTool(params) {
       file_key: fileKey,
       signed_url: signedUrl,
       download_url: `/api/student/certificates/${cert.certificate_id}/download`,
-      view_url: `/api/student/certificates/${cert.certificate_id}/view`
+      view_url: `/api/student/certificates/${cert.certificate_id}/view`,
+      file_base64: fileBase64
     }
   };
 }
@@ -2317,8 +2328,10 @@ async function verifyCertificateTool(params) {
     status: cert.status,
     verified: isValid
   });
+  const verificationHash = crypto3.createHash("sha256").update(`${cert.certificate_id}:${cert.issue_date}:${cert.status}`).digest("hex");
   return {
     verified: isValid,
+    is_valid: isValid,
     statusCode: isValid ? 200 : 400,
     certificate_id: cert.certificate_id,
     certificate_name: cert.certificate_name,
@@ -2326,7 +2339,9 @@ async function verifyCertificateTool(params) {
     university: cert.studentUniversity || "CampusConnect Ambassador Network",
     program: cert.program || "Official Academic Program",
     issue_date: cert.issue_date,
-    status: cert.status
+    status: cert.status,
+    issuer: "CampusConnect Ambassador Network",
+    verification_hash: verificationHash
   };
 }
 
@@ -2431,10 +2446,10 @@ router2.get("/certificates/:id/view", async (req, res) => {
     }
     const cert = result.certificate;
     const filename = `${cert.certificate_id}.pdf`;
-    if (cert.file_path && fs3.existsSync(cert.file_path)) {
+    if (cert.file_path && fs4.existsSync(cert.file_path)) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-      fs3.createReadStream(cert.file_path).pipe(res);
+      fs4.createReadStream(cert.file_path).pipe(res);
       return;
     }
     const pdfBuffer = generateCertificatePdfBuffer({
@@ -2468,10 +2483,10 @@ router2.get("/certificates/:id/download", async (req, res) => {
     const studentNameClean = (cert.student_name || "Student").replace(/[^a-zA-Z0-9]/g, "_");
     const titleClean = (cert.certificate_name || "Certificate").replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`;
-    if (cert.file_path && fs3.existsSync(cert.file_path)) {
+    if (cert.file_path && fs4.existsSync(cert.file_path)) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      fs3.createReadStream(cert.file_path).pipe(res);
+      fs4.createReadStream(cert.file_path).pipe(res);
       return;
     }
     const pdfBuffer = generateCertificatePdfBuffer({
@@ -2695,7 +2710,7 @@ var student_default = router2;
 
 // server/routes/admin.ts
 import { Router as Router3 } from "express";
-import fs4 from "fs";
+import fs5 from "fs";
 import crypto4 from "crypto";
 import bcrypt3 from "bcryptjs";
 import multer from "multer";
@@ -3146,10 +3161,10 @@ router3.get("/certificates/:id/view", async (req, res) => {
     const cert = check.rows[0];
     if (cert.file_key) {
       const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs4.existsSync(physicalPath)) {
+      if (physicalPath && fs5.existsSync(physicalPath)) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `inline; filename="${cert.certificate_id}.pdf"`);
-        fs4.createReadStream(physicalPath).pipe(res);
+        fs5.createReadStream(physicalPath).pipe(res);
         return;
       }
     }
@@ -3188,10 +3203,10 @@ router3.get("/certificates/:id/download", async (req, res) => {
     const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`;
     if (cert.file_key) {
       const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs4.existsSync(physicalPath)) {
+      if (physicalPath && fs5.existsSync(physicalPath)) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-        fs4.createReadStream(physicalPath).pipe(res);
+        fs5.createReadStream(physicalPath).pipe(res);
         return;
       }
     }
@@ -3410,7 +3425,7 @@ var admin_default = router3;
 
 // server/routes/public.ts
 import { Router as Router4 } from "express";
-import fs5 from "fs";
+import fs6 from "fs";
 import path3 from "path";
 import jwt2 from "jsonwebtoken";
 var router4 = Router4();
@@ -3460,14 +3475,14 @@ router4.get("/storage/download", async (req, res) => {
       return;
     }
     const physicalPath = getFilePath(key);
-    if (!physicalPath || !fs5.existsSync(physicalPath)) {
+    if (!physicalPath || !fs6.existsSync(physicalPath)) {
       res.status(404).json({ error: "File not found in storage" });
       return;
     }
     const filename = path3.basename(physicalPath);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    fs5.createReadStream(physicalPath).pipe(res);
+    fs6.createReadStream(physicalPath).pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3531,10 +3546,10 @@ router4.get("/certificates/:id/download", async (req, res) => {
     const filename = `${sanitizedStudentName}_${sanitizedTitle}_Certificate.pdf`;
     if (cert.file_key) {
       const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs5.existsSync(physicalPath)) {
+      if (physicalPath && fs6.existsSync(physicalPath)) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-        const stream = fs5.createReadStream(physicalPath);
+        const stream = fs6.createReadStream(physicalPath);
         stream.pipe(res);
         return;
       }

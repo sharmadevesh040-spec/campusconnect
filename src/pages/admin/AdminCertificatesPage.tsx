@@ -10,7 +10,7 @@ import {
   Download, Eye, Edit3, Trash2, FileUp, RefreshCw,
   ExternalLink, CheckCircle2, Database, Upload, UserCheck
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 import QRCode from 'qrcode'
 import {
   getAllCertificates, createCertificate, updateCertificate,
@@ -388,7 +388,7 @@ export default function AdminCertificatesPage() {
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
                   <span className="text-emerald-400 font-semibold">{cert.certificateId}</span>
                   <span>•</span>
-                  <span>Issued: {format(new Date(cert.issueDate), 'dd MMM yyyy')}</span>
+                  <span>Issued: {safeFormatDate(cert.issueDate, 'dd MMM yyyy')}</span>
                   {cert.studentEmail && (
                     <>
                       <span>•</span>

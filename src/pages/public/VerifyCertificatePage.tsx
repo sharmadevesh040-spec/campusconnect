@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input'
 import { getCertificateByCertId, downloadCertificate } from '@/services/certificateService'
 import type { Certificate } from '@/types'
 import { CertificateStatus } from '@/types/certificate'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 
 export default function VerifyCertificatePage() {
   const { certificateId } = useParams<{ certificateId?: string }>()
@@ -124,7 +124,7 @@ export default function VerifyCertificatePage() {
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Date of Issuance</p>
                   <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {format(new Date(certificate.issueDate), 'dd MMMM yyyy')}
+                    {safeFormatDate(certificate.issueDate, 'dd MMMM yyyy')}
                   </p>
                 </div>
               </div>

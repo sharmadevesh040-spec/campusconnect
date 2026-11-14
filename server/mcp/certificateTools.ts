@@ -380,6 +380,15 @@ export async function getCertificateTool(params: GetCertificateParams) {
   // 5. Generate temporary signed URL (expires in 1 hour)
   const signedUrl = generateSignedDownloadUrl(fileKey, cert.student_id)
 
+  let fileBase64: string | undefined
+  if (physicalPath && fs.existsSync(physicalPath)) {
+    try {
+      fileBase64 = fs.readFileSync(physicalPath).toString('base64')
+    } catch (e) {
+      console.warn('[MCP getCertificateTool] Unable to read physical file for base64:', e)
+    }
+  }
+
   // 6. Audit log view access
   await logAudit(
     caller_user_id,
@@ -392,6 +401,7 @@ export async function getCertificateTool(params: GetCertificateParams) {
   return {
     success: true,
     statusCode: 200,
+    file_base64: fileBase64,
     certificate: {
       id: cert.id,
       certificate_id: cert.certificate_id,
@@ -406,7 +416,8 @@ export async function getCertificateTool(params: GetCertificateParams) {
       file_key: fileKey,
       signed_url: signedUrl,
       download_url: `/api/student/certificates/${cert.certificate_id}/download`,
-      view_url: `/api/student/certificates/${cert.certificate_id}/view`
+      view_url: `/api/student/certificates/${cert.certificate_id}/view`,
+      file_base64: fileBase64
     }
   }
 }
@@ -516,8 +527,11 @@ export async function verifyCertificateTool(params: VerifyCertificateParams) {
     verified: isValid
   })
 
+  const verificationHash = crypto.createHash('sha256').update(`${cert.certificate_id}:${cert.issue_date}:${cert.status}`).digest('hex')
+
   return {
     verified: isValid,
+    is_valid: isValid,
     statusCode: isValid ? 200 : 400,
     certificate_id: cert.certificate_id,
     certificate_name: cert.certificate_name,
@@ -525,6 +539,8 @@ export async function verifyCertificateTool(params: VerifyCertificateParams) {
     university: cert.studentUniversity || 'CampusConnect Ambassador Network',
     program: cert.program || 'Official Academic Program',
     issue_date: cert.issue_date,
-    status: cert.status
+    status: cert.status,
+    issuer: 'CampusConnect Ambassador Network',
+    verification_hash: verificationHash
   }
 }
