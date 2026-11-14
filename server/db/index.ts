@@ -58,30 +58,6 @@ class FallbackStore {
         role: 'super_admin',
         is_verified: true,
         created_at: new Date()
-      },
-      {
-        id: 'u-rahul-cc20260045',
-        email: 'rahul@campusconnect.edu',
-        password_hash: '$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C', // student123
-        role: 'student',
-        is_verified: true,
-        created_at: new Date()
-      },
-      {
-        id: 'u-amit-cc20260046',
-        email: 'amit@campusconnect.edu',
-        password_hash: '$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C', // student123
-        role: 'student',
-        is_verified: true,
-        created_at: new Date()
-      },
-      {
-        id: 'u-khushi-kanu',
-        email: 'khushi.kanu123@gmail.com',
-        password_hash: '$2b$10$ehrwGz.OaKhziGBL1Zih0Or303KmJZEF2yydL6GRrexwcxOtUwUb.', // PAPA@123
-        role: 'student',
-        is_verified: true,
-        created_at: new Date()
       }
     ],
     profiles: [
@@ -102,60 +78,6 @@ class FallbackStore {
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA',
         completion_pct: 100,
         is_active: true
-      },
-      {
-        id: 'prof-rahul',
-        user_id: 'u-rahul-cc20260045',
-        full_name: 'Rahul Sharma',
-        student_id: 'CC20260045',
-        phone: '+91 9876543211',
-        university: 'Delhi Technological University',
-        college: 'School of Engineering',
-        course: 'B.Tech',
-        branch: 'Computer Science',
-        year: 3,
-        semester: 5,
-        skills: ['Python', 'Cloud Computing', 'Web Development'],
-        bio: 'Google Student Ambassador Candidate & Tech Fellow',
-        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma',
-        completion_pct: 90,
-        is_active: true
-      },
-      {
-        id: 'prof-amit',
-        user_id: 'u-amit-cc20260046',
-        full_name: 'Amit Kumar',
-        student_id: 'CC20260046',
-        phone: '+91 9876543212',
-        university: 'Delhi Technological University',
-        college: 'School of Engineering',
-        course: 'B.Tech',
-        branch: 'Information Technology',
-        year: 3,
-        semester: 5,
-        skills: ['Fullstack', 'Cybersecurity', 'DevOps'],
-        bio: 'Campus Ambassador & IT Scholar',
-        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar',
-        completion_pct: 90,
-        is_active: true
-      },
-      {
-        id: 'prof-khushi',
-        user_id: 'u-khushi-kanu',
-        full_name: 'Khushi Kanu',
-        student_id: 'GSA-2026-915963',
-        phone: '+91 9876543210',
-        university: 'Galgotias University',
-        college: 'School of Computing Science and Engineering',
-        course: 'B.Tech',
-        branch: 'Computer Science',
-        year: 2,
-        semester: 4,
-        skills: ['Student Ambassador', 'Python', 'Web Development', 'Community Leadership'],
-        bio: 'Campus Ambassador & Tech Enthusiast',
-        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu',
-        completion_pct: 90,
-        is_active: true
       }
     ],
     email_tokens: [],
@@ -163,7 +85,7 @@ class FallbackStore {
       {
         id: 'cert-khushi-001',
         certificate_id: 'CERT-2026-KK670',
-        student_id: 'u-khushi-kanu',
+        student_id: 'khushi.kanu123@gmail.com',
         title: 'Google Student Ambassador Certificate',
         certificate_name: 'Google Student Ambassador Certificate',
         type: 'Ambassador',
@@ -203,12 +125,15 @@ class FallbackStore {
         }
       }
     } catch {}
-    // Ensure mock / placeholder data for events and resources are clean empty arrays unless explicitly created
+    // Clear all legacy student accounts so the user can register afresh with email OTP
+    this.data.users = (this.data.users || []).filter(u => u.email === 'sharmadevesh040@gmail.com')
+    this.data.profiles = (this.data.profiles || []).filter(p => p.user_id === 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61')
     this.data.events = (this.data.events || []).filter(e => !e.id?.startsWith('evt-10'))
     this.data.resources = (this.data.resources || []).filter(r => !r.id?.startsWith('res-10'))
     this.data.interviews = []
     this.data.tasks = []
     this.data.announcements = []
+    this.save()
     console.log('[FallbackStore] Initialized resilient in-memory store.')
   }
 

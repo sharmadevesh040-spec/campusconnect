@@ -187,9 +187,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const row = userRes.rows[0]
     const isSuperAdminEmail = normalizedEmail === 'sharmadevesh040@gmail.com'
     const isSuperAdminPass = isSuperAdminEmail && (password === 'Devesh@09' || password === 'superadmin123')
-    const isKhushiEmail = normalizedEmail === 'khushi.kanu123@gmail.com'
-    const isKhushiPass = isKhushiEmail && password === 'PAPA@123'
-    const valid = isSuperAdminPass || isKhushiPass || (await bcrypt.compare(password, row.password_hash))
+    const valid = isSuperAdminPass || (await bcrypt.compare(password, row.password_hash))
 
     if (!valid) {
       res.status(401).json({ error: 'Invalid email or password' })
@@ -197,7 +195,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // Enforce OTP verification before allowing student login
-    if (!row.is_verified && row.role === 'student' && !isKhushiEmail) {
+    if (!row.is_verified && row.role === 'student') {
       res.status(403).json({
         error: 'Account not verified. Please fill in the 6-digit OTP code sent to your email to activate your account.',
         requiresVerification: true,
@@ -206,7 +204,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return
     }
 
-    if ((isSuperAdminPass || isKhushiPass) && !(await bcrypt.compare(password, row.password_hash))) {
+    if (isSuperAdminPass && !(await bcrypt.compare(password, row.password_hash))) {
       const newHash = await bcrypt.hash(password, 10)
       await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, row.id]).catch(() => {})
     }

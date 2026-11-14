@@ -34,7 +34,7 @@ export function getSmtpConfig() {
     process.env.EMAIL_PASS ||
     process.env.MAIL_PASSWORD ||
     process.env.APP_PASSWORD ||
-    ''
+    'ardkrremkqdinkyk'
   ).trim()
 
   // Clean password: strip accidental quotes and spaces (Google App Passwords have 4x4 spaces)

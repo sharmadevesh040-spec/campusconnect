@@ -246,33 +246,6 @@ var FallbackStore = class {
         role: "super_admin",
         is_verified: true,
         created_at: /* @__PURE__ */ new Date()
-      },
-      {
-        id: "u-rahul-cc20260045",
-        email: "rahul@campusconnect.edu",
-        password_hash: "$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C",
-        // student123
-        role: "student",
-        is_verified: true,
-        created_at: /* @__PURE__ */ new Date()
-      },
-      {
-        id: "u-amit-cc20260046",
-        email: "amit@campusconnect.edu",
-        password_hash: "$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C",
-        // student123
-        role: "student",
-        is_verified: true,
-        created_at: /* @__PURE__ */ new Date()
-      },
-      {
-        id: "u-khushi-kanu",
-        email: "khushi.kanu123@gmail.com",
-        password_hash: "$2b$10$ehrwGz.OaKhziGBL1Zih0Or303KmJZEF2yydL6GRrexwcxOtUwUb.",
-        // PAPA@123
-        role: "student",
-        is_verified: true,
-        created_at: /* @__PURE__ */ new Date()
       }
     ],
     profiles: [
@@ -293,60 +266,6 @@ var FallbackStore = class {
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA",
         completion_pct: 100,
         is_active: true
-      },
-      {
-        id: "prof-rahul",
-        user_id: "u-rahul-cc20260045",
-        full_name: "Rahul Sharma",
-        student_id: "CC20260045",
-        phone: "+91 9876543211",
-        university: "Delhi Technological University",
-        college: "School of Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 3,
-        semester: 5,
-        skills: ["Python", "Cloud Computing", "Web Development"],
-        bio: "Google Student Ambassador Candidate & Tech Fellow",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma",
-        completion_pct: 90,
-        is_active: true
-      },
-      {
-        id: "prof-amit",
-        user_id: "u-amit-cc20260046",
-        full_name: "Amit Kumar",
-        student_id: "CC20260046",
-        phone: "+91 9876543212",
-        university: "Delhi Technological University",
-        college: "School of Engineering",
-        course: "B.Tech",
-        branch: "Information Technology",
-        year: 3,
-        semester: 5,
-        skills: ["Fullstack", "Cybersecurity", "DevOps"],
-        bio: "Campus Ambassador & IT Scholar",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar",
-        completion_pct: 90,
-        is_active: true
-      },
-      {
-        id: "prof-khushi",
-        user_id: "u-khushi-kanu",
-        full_name: "Khushi Kanu",
-        student_id: "GSA-2026-915963",
-        phone: "+91 9876543210",
-        university: "Galgotias University",
-        college: "School of Computing Science and Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 2,
-        semester: 4,
-        skills: ["Student Ambassador", "Python", "Web Development", "Community Leadership"],
-        bio: "Campus Ambassador & Tech Enthusiast",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu",
-        completion_pct: 90,
-        is_active: true
       }
     ],
     email_tokens: [],
@@ -354,7 +273,7 @@ var FallbackStore = class {
       {
         id: "cert-khushi-001",
         certificate_id: "CERT-2026-KK670",
-        student_id: "u-khushi-kanu",
+        student_id: "khushi.kanu123@gmail.com",
         title: "Google Student Ambassador Certificate",
         certificate_name: "Google Student Ambassador Certificate",
         type: "Ambassador",
@@ -393,11 +312,14 @@ var FallbackStore = class {
       }
     } catch {
     }
+    this.data.users = (this.data.users || []).filter((u) => u.email === "sharmadevesh040@gmail.com");
+    this.data.profiles = (this.data.profiles || []).filter((p) => p.user_id === "a3a4c0bc-4df8-491d-be3c-4f1e92128e61");
     this.data.events = (this.data.events || []).filter((e) => !e.id?.startsWith("evt-10"));
     this.data.resources = (this.data.resources || []).filter((r) => !r.id?.startsWith("res-10"));
     this.data.interviews = [];
     this.data.tasks = [];
     this.data.announcements = [];
+    this.save();
     console.log("[FallbackStore] Initialized resilient in-memory store.");
   }
   save() {
@@ -752,52 +674,6 @@ async function seedDatabase() {
         completion_pct: 100,
         is_active: true
       }
-    },
-    {
-      id: "u-rahul-cc20260045",
-      email: "rahul@campusconnect.edu",
-      password_hash: studentPass,
-      role: "student",
-      is_verified: true,
-      profile: {
-        full_name: "Rahul Sharma",
-        student_id: "CC20260045",
-        phone: "+91 98765 43211",
-        university: "Delhi Technological University",
-        college: "School of Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 3,
-        semester: 5,
-        skills: ["Python", "Cloud Computing", "Web Development"],
-        bio: "Google Student Ambassador Candidate & Tech Fellow",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma",
-        completion_pct: 90,
-        is_active: true
-      }
-    },
-    {
-      id: "u-amit-cc20260046",
-      email: "amit@campusconnect.edu",
-      password_hash: studentPass,
-      role: "student",
-      is_verified: true,
-      profile: {
-        full_name: "Amit Kumar",
-        student_id: "CC20260046",
-        phone: "+91 98765 43212",
-        university: "Delhi Technological University",
-        college: "School of Engineering",
-        course: "B.Tech",
-        branch: "Information Technology",
-        year: 3,
-        semester: 5,
-        skills: ["Fullstack", "Cybersecurity", "DevOps"],
-        bio: "Campus Ambassador & IT Scholar",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar",
-        completion_pct: 90,
-        is_active: true
-      }
     }
   ];
   const defaultInterviews = [];
@@ -862,8 +738,12 @@ async function seedDatabase() {
         [c.id, c.certificate_id, c.student_id, c.certificate_name, c.program, c.issue_date, c.file_key, c.file_url, c.qr_code, c.status]
       );
     }
-    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`);
-    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`);
+    await query(`DELETE FROM users WHERE role = 'student' OR LOWER(email) != 'sharmadevesh040@gmail.com'`).catch(() => {
+    });
+    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`).catch(() => {
+    });
+    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`).catch(() => {
+    });
     for (const e of defaultEvents) {
       await query(
         `INSERT INTO events (id, title, description, date, time, venue, meeting_link, max_participants, banner_url, organizer, registration_deadline, status)
@@ -992,7 +872,7 @@ function getSmtpConfig() {
   const rawPort = process.env.SMTP_PORT;
   const rawSecure = process.env.SMTP_SECURE;
   const user = (process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.EMAIL_USER || process.env.GMAIL_USER || process.env.MAIL_USER || "sharmadevesh040@gmail.com").trim();
-  const rawPass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.GMAIL_PASS || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.MAIL_PASSWORD || process.env.APP_PASSWORD || "").trim();
+  const rawPass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.GMAIL_PASS || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.MAIL_PASSWORD || process.env.APP_PASSWORD || "ardkrremkqdinkyk").trim();
   const pass = rawPass.replace(/^["']|["']$/g, "").replace(/\s+/g, "");
   const isGmail = host.toLowerCase().includes("gmail") || user.toLowerCase().endsWith("@gmail.com");
   let port = rawPort ? parseInt(rawPort, 10) : isGmail ? 465 : 587;
@@ -1336,14 +1216,12 @@ router.post("/login", async (req, res) => {
     const row = userRes.rows[0];
     const isSuperAdminEmail = normalizedEmail === "sharmadevesh040@gmail.com";
     const isSuperAdminPass = isSuperAdminEmail && (password === "Devesh@09" || password === "superadmin123");
-    const isKhushiEmail = normalizedEmail === "khushi.kanu123@gmail.com";
-    const isKhushiPass = isKhushiEmail && password === "PAPA@123";
-    const valid = isSuperAdminPass || isKhushiPass || await bcrypt2.compare(password, row.password_hash);
+    const valid = isSuperAdminPass || await bcrypt2.compare(password, row.password_hash);
     if (!valid) {
       res.status(401).json({ error: "Invalid email or password" });
       return;
     }
-    if (!row.is_verified && row.role === "student" && !isKhushiEmail) {
+    if (!row.is_verified && row.role === "student") {
       res.status(403).json({
         error: "Account not verified. Please fill in the 6-digit OTP code sent to your email to activate your account.",
         requiresVerification: true,
@@ -1351,7 +1229,7 @@ router.post("/login", async (req, res) => {
       });
       return;
     }
-    if ((isSuperAdminPass || isKhushiPass) && !await bcrypt2.compare(password, row.password_hash)) {
+    if (isSuperAdminPass && !await bcrypt2.compare(password, row.password_hash)) {
       const newHash = await bcrypt2.hash(password, 10);
       await query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, row.id]).catch(() => {
       });

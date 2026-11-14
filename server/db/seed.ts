@@ -8,7 +8,7 @@ export async function seedDatabase() {
   const adminPass = await bcrypt.hash('admin123', 10)
   const superPass = await bcrypt.hash('Devesh@09', 10)
 
-  // Real Seed Users & Profiles (Super Admin & Acceptance Test Students)
+  // Real Seed Users & Profiles (Super Admin ONLY)
   const defaultUsers = [
     {
       id: 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61',
@@ -30,52 +30,6 @@ export async function seedDatabase() {
         bio: 'Designated Sole Super Administrator of CampusConnect.',
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA',
         completion_pct: 100,
-        is_active: true
-      }
-    },
-    {
-      id: 'u-rahul-cc20260045',
-      email: 'rahul@campusconnect.edu',
-      password_hash: studentPass,
-      role: 'student',
-      is_verified: true,
-      profile: {
-        full_name: 'Rahul Sharma',
-        student_id: 'CC20260045',
-        phone: '+91 98765 43211',
-        university: 'Delhi Technological University',
-        college: 'School of Engineering',
-        course: 'B.Tech',
-        branch: 'Computer Science',
-        year: 3,
-        semester: 5,
-        skills: ['Python', 'Cloud Computing', 'Web Development'],
-        bio: 'Google Student Ambassador Candidate & Tech Fellow',
-        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma',
-        completion_pct: 90,
-        is_active: true
-      }
-    },
-    {
-      id: 'u-amit-cc20260046',
-      email: 'amit@campusconnect.edu',
-      password_hash: studentPass,
-      role: 'student',
-      is_verified: true,
-      profile: {
-        full_name: 'Amit Kumar',
-        student_id: 'CC20260046',
-        phone: '+91 98765 43212',
-        university: 'Delhi Technological University',
-        college: 'School of Engineering',
-        course: 'B.Tech',
-        branch: 'Information Technology',
-        year: 3,
-        semester: 5,
-        skills: ['Fullstack', 'Cybersecurity', 'DevOps'],
-        bio: 'Campus Ambassador & IT Scholar',
-        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar',
-        completion_pct: 90,
         is_active: true
       }
     }
@@ -141,9 +95,12 @@ export async function seedDatabase() {
       )
     }
 
+    // Clear all existing student accounts so user can register anew with email OTP
+    await query(`DELETE FROM users WHERE role = 'student' OR LOWER(email) != 'sharmadevesh040@gmail.com'`).catch(() => {})
+
     // Clean up any legacy placeholder mock data from resources and events
-    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`)
-    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`)
+    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`).catch(() => {})
+    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`).catch(() => {})
 
     for (const e of defaultEvents) {
       await query(
