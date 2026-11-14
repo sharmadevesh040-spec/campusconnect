@@ -8,7 +8,7 @@ export function getJwtSecret(): string {
     if (process.env.NODE_ENV === 'production' && process.env.VERCEL) {
       console.error('[AUTH ERROR] AUTH_SECRET is not configured in Vercel environment variables!')
     }
-    return 'campusconnect-jwt-secret-key-2026'
+    return 'campusconnect-jwt-secret-key-2026-production'
   }
   return secret
 }
