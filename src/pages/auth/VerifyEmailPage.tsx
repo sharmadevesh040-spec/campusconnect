@@ -14,15 +14,6 @@ export default function VerifyEmailPage() {
   const [resending, setResending] = useState(false)
   const [verified, setVerified] = useState(false)
 
-  // Auto-verify if both email and code exist in URL query params
-  useEffect(() => {
-    const urlEmail = searchParams.get('email')
-    const urlCode = searchParams.get('code')
-    if (urlEmail && urlCode && !verified) {
-      handleVerify(urlEmail, urlCode)
-    }
-  }, [searchParams])
-
   const handleVerify = async (verifyEmail = email, verifyCode = code) => {
     if (!verifyEmail.trim() || !verifyCode.trim()) {
       toast.error('Please enter both your email address and 6-digit verification code')
@@ -127,14 +118,7 @@ export default function VerifyEmailPage() {
         </div>
 
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">6-Digit Code</label>
-            {code && (
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                AUTO-LOADED
-              </span>
-            )}
-          </div>
+          <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Enter 6-Digit Verification Code</label>
           <div className="relative rounded-2xl bg-[#151518] border border-white/[0.08] focus-within:border-amber-300/80 transition-all">
             <input
               type="text"

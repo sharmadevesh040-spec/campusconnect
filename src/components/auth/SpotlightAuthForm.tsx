@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, User, Eye, EyeOff, Sparkles, Shield, Send, CheckCircle2, Phone, Hash, ArrowRight } from 'lucide-react'
+import { Mail, Lock, User, Eye, EyeOff, Sparkles, Shield, Send, CheckCircle2, Phone, Hash, ArrowRight, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { apiRequest, setToken } from '@/services/api'
@@ -12,7 +12,7 @@ interface SpotlightAuthFormProps {
   initialMode?: 'login' | 'register'
 }
 
-type ActiveField = 'fullName' | 'email' | 'password' | 'confirmPassword' | 'phone' | 'studentId' | 'otp' | 'button' | null
+type ActiveField = 'fullName' | 'email' | 'password' | 'confirmPassword' | 'phone' | 'studentId' | 'accessCode' | 'otp' | 'button' | null
 
 export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAuthFormProps) {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode)
@@ -36,6 +36,7 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
   const [regEmail, setRegEmail] = useState('')
   const [regPhone, setRegPhone] = useState('')
   const [regStudentId, setRegStudentId] = useState('')
+  const [regAccessCode, setRegAccessCode] = useState('')
   const [regPassword, setRegPassword] = useState('')
   const [regConfirmPassword, setRegConfirmPassword] = useState('')
 
@@ -71,12 +72,13 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
         map.button = 375
       }
     } else {
-      map.fullName = 175
-      map.email = 245
-      map.studentId = 315
-      map.password = 385
-      map.confirmPassword = 455
-      map.button = 535
+      map.fullName = 165
+      map.email = 225
+      map.studentId = 285
+      map.accessCode = 345
+      map.password = 410
+      map.confirmPassword = 475
+      map.button = 545
     }
     return map
   }, [mode, loginMethod])
@@ -105,18 +107,6 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
   const beamWidth = 140
   const leftBeamPath = `M ${lampLeft.x} ${lampLeft.y} L ${targetX - beamWidth} ${currentTargetY + 20} L ${targetX + beamWidth} ${currentTargetY + 20} Z`
   const rightBeamPath = `M ${lampRight.x} ${lampRight.y} L ${targetX - beamWidth} ${currentTargetY + 20} L ${targetX + beamWidth} ${currentTargetY + 20} Z`
-
-  // Quick fill for Designated Super Admin
-  const handleSuperAdminFill = () => {
-    setMode('login')
-    setLoginMethod('password')
-    setLoginEmail('sharmadevesh040@gmail.com')
-    setLoginPassword('Devesh@09')
-    setActiveField('password')
-    toast.info('Super Admin credentials loaded', {
-      description: 'sharmadevesh040@gmail.com (Sole Administrator)'
-    })
-  }
 
   // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -223,20 +213,37 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
       return
     }
 
+    // Program Access Code Authentication
+    const validCodes = ['GSA2026', 'GSA-2026', 'CAMPUS2026', 'CC2026', 'AMBASSADOR', 'AMBASSADOR2026', 'CAMPUSCONNECT', 'DEVESH2026', 'STUDENT2026', 'PAPA@123']
+    const enteredCode = regAccessCode.trim().toUpperCase()
+    if (!enteredCode) {
+      toast.error('Ambassador Access Code Required', {
+        description: 'Please enter your program authentication code (e.g. GSA2026 or CC2026) provided by your campus administrator.'
+      })
+      setActiveField('accessCode')
+      return
+    }
+    if (!validCodes.includes(enteredCode)) {
+      toast.error('Invalid Program Code', {
+        description: 'The access code is not recognized. Please use an official code (e.g. GSA2026 or CAMPUS2026).'
+      })
+      setActiveField('accessCode')
+      return
+    }
+
     setSubmitting(true)
     try {
       const studentData = {
-        phone: regPhone.trim() || '+1 (555) 000-0000',
-        studentId: regStudentId.trim() || 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000)
+        phone: regPhone.trim() || '+91 9876543210',
+        studentId: regStudentId.trim() || 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000),
+        accessCode: enteredCode
       }
-      const res: any = await authRegister(regEmail.trim(), regPassword, regName.trim(), studentData)
-      const codeParam = res?.verificationCode ? `&code=${encodeURIComponent(res.verificationCode)}` : ''
+      await authRegister(regEmail.trim(), regPassword, regName.trim(), studentData)
       toast.success('Ambassador Account Created!', {
-        description: res?.verificationCode
-          ? `Your 6-digit verification code is: ${res.verificationCode}`
-          : 'Verification code dispatched via SMTP.'
+        description: 'A 6-digit confirmation code was sent to your email. Enter the code to activate your account.'
       })
-      navigate(`/verify-email?email=${encodeURIComponent(regEmail.trim())}${codeParam}`)
+      // Direct to verify email page WITHOUT passing code in query parameters (forces manual code entry)
+      navigate(`/verify-email?email=${encodeURIComponent(regEmail.trim())}`)
     } catch (err: any) {
       toast.error('Registration failed', { description: err.message || 'Unable to complete registration.' })
     } finally {
@@ -682,18 +689,6 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
                   )}
                 </div>
               )}
-
-              {/* Super Admin Quick Launch Button */}
-              <div className="mt-5 pt-4 border-t border-white/[0.06] text-center">
-                <button
-                  type="button"
-                  onClick={handleSuperAdminFill}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-500/30 text-purple-200 text-xs font-mono transition-all shadow-[0_0_15px_rgba(168,85,247,0.15)] hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Shield className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Admin Fill (sharmadevesh040@gmail.com)</span>
-                </button>
-              </div>
             </div>
           ) : (
             /* ======================================================= */
@@ -797,6 +792,37 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* 3.5. Ambassador Program Access Code */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Ambassador Access Code</label>
+                  <span className="text-[10px] font-mono text-amber-300/80 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">CODE AUTHENTICATION</span>
+                </div>
+                <div 
+                  className={`relative rounded-2xl transition-all duration-300 ${
+                    activeField === 'accessCode'
+                      ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+                      : 'bg-[#151518] border border-white/[0.08]'
+                  }`}
+                >
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
+                    <KeyRound className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <input
+                    type="text"
+                    value={regAccessCode}
+                    onChange={e => setRegAccessCode(e.target.value)}
+                    onFocus={() => setActiveField('accessCode')}
+                    placeholder="Enter program code (e.g. GSA2026)"
+                    className="w-full bg-transparent pl-10 pr-4 py-2.5 text-xs font-mono uppercase tracking-wider text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500 pl-1">
+                  Required: Institutional authentication code provided by campus admin (e.g. GSA2026)
+                </p>
               </div>
 
               {/* 4. Password */}
