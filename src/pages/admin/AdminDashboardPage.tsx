@@ -4,9 +4,9 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Link } from 'react-router-dom'
 import {
-  Users, Award, CalendarDays,
+  Users, Award, Sparkles,
   TrendingUp, ArrowUpRight, ShieldCheck, UserCheck, Plus,
-  Activity, Server, Database, Sparkles, RefreshCw
+  Activity, Server, Database, RefreshCw
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -149,7 +149,7 @@ export default function AdminDashboardPage() {
           <div className="lookap-card p-5 h-full flex flex-col justify-between group-hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-start justify-between mb-4">
               <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-center text-purple-400">
-                <CalendarDays className="w-5 h-5" />
+                <Sparkles className="w-5 h-5" />
               </div>
               <span className="spec-dot-amber" />
             </div>
@@ -254,7 +254,7 @@ export default function AdminDashboardPage() {
                 <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 hover:border-purple-500/40 transition-all flex items-center justify-between group">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                      <CalendarDays className="w-4 h-4" />
+                      <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-white group-hover:text-purple-300 transition-colors">Campus Events</p>

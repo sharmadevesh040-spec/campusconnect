@@ -26,9 +26,9 @@ export default defineConfig({
         ],
         shortcuts: [
           { name: 'Dashboard', url: '/student/dashboard', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
-          { name: 'Calendar', url: '/student/calendar', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
           { name: 'Certificates', url: '/student/certificates', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
-          { name: 'Interviews', url: '/student/interviews', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] }
+          { name: 'Events', url: '/student/events', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Resources', url: '/student/resources', icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] }
         ]
       },
       workbox: {

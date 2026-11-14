@@ -16,7 +16,7 @@ export function NotificationPermissionPrompt() {
     localStorage.setItem('cc-notif-prompted', 'true')
     setShow(false)
     const perm = await Notification.requestPermission()
-    if (perm === 'granted') toast.success('Notifications enabled! You will receive interview and event reminders.')
+    if (perm === 'granted') toast.success('Notifications enabled! You will receive certificate and event reminders.')
   }
   const dismiss = () => { localStorage.setItem('cc-notif-prompted', 'true'); setShow(false) }
 
@@ -29,7 +29,7 @@ export function NotificationPermissionPrompt() {
         </div>
         <div>
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Stay updated</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Get reminders for interviews, events and deadlines.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Get reminders for certificates, campus summits, and official announcements.</p>
           <div className="flex gap-2 mt-3">
             <Button size="sm" onClick={enable}>Enable Notifications</Button>
             <Button size="sm" variant="ghost" onClick={dismiss}>Later</Button>

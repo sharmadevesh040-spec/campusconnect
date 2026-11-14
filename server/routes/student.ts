@@ -17,23 +17,6 @@ router.get('/dashboard', async (req: AuthRequest, res: Response): Promise<void> 
   try {
     const studentId = req.user!.id
 
-    // Next interview for this student from PostgreSQL
-    const intRes = await query(
-      `SELECT * FROM interviews 
-       WHERE student_id = $1 AND status IN ('Scheduled', 'Confirmed', 'Rescheduled')
-       ORDER BY date ASC, time ASC LIMIT 1`,
-      [studentId]
-    )
-    const nextInterview = intRes.rows[0] || null
-
-    // Pending tasks for this student
-    const taskRes = await query(
-      `SELECT * FROM tasks 
-       WHERE student_id = $1 AND status IN ('Pending', 'In Progress')
-       ORDER BY deadline ASC`,
-      [studentId]
-    )
-
     // Certificates for this student
     const certRes = await query(
       `SELECT * FROM certificates 
@@ -56,11 +39,6 @@ router.get('/dashboard', async (req: AuthRequest, res: Response): Promise<void> 
     )
     const nextEvent = evtRes.rows[0] || null
 
-    // Latest announcements
-    const annRes = await query(
-      `SELECT * FROM announcements ORDER BY publish_date DESC LIMIT 5`
-    )
-
     // Unread notifications count
     const noteRes = await query(
       `SELECT count(*)::int FROM notifications WHERE user_id = $1 AND is_read = false`,
@@ -68,25 +46,14 @@ router.get('/dashboard', async (req: AuthRequest, res: Response): Promise<void> 
     )
     const unreadCount = noteRes.rows[0]?.count || 0
 
-    // Total interviews count
-    const totalIntRes = await query(
-      `SELECT count(*)::int FROM interviews WHERE student_id = $1`,
-      [studentId]
-    )
-
     res.json({
       stats: {
-        upcomingInterviewsCount: totalIntRes.rows[0]?.count || 0,
-        pendingTasksCount: taskRes.rows.length,
         certificatesCount: certRes.rows.length,
         upcomingEventsCount: evtRes.rows.length,
         unreadNotificationsCount: unreadCount
       },
-      nextInterview,
       nextEvent,
-      pendingTasks: taskRes.rows.slice(0, 5),
-      certificates: certRes.rows.slice(0, 4),
-      announcements: annRes.rows.slice(0, 3)
+      certificates: certRes.rows.slice(0, 4)
     })
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to load dashboard' })

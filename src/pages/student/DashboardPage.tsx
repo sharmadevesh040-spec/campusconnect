@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CalendarDays, Award, ShieldCheck, Sparkles, Eye, Download,
+  Compass, Award, ShieldCheck, Sparkles, Eye, Download,
   ChevronRight, BookOpen, ArrowUpRight, GraduationCap
 } from 'lucide-react'
 import { safeTime, safeFormatDate } from '@/lib/dateUtils'
@@ -55,7 +55,7 @@ export default function DashboardPage() {
     {
       label: 'Campus Events',
       value: upcomingEvents.length,
-      icon: CalendarDays,
+      icon: Compass,
       subtext: 'Registration open',
       dot: 'spec-dot-indigo',
       link: '/student/events'
@@ -141,7 +141,7 @@ export default function DashboardPage() {
               </Button>
             </Link>
             <Link to="/student/events">
-              <Button variant="tactileDark" size="sm" className="w-full text-xs" leftIcon={<CalendarDays className="w-3.5 h-3.5" />}>
+              <Button variant="tactileDark" size="sm" className="w-full text-xs" leftIcon={<Compass className="w-3.5 h-3.5" />}>
                 Campus Events
               </Button>
             </Link>
@@ -352,7 +352,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-purple-500" />
+                <Compass className="w-4 h-4 text-purple-500" />
                 Campus Events Radar
               </h2>
               <Link to="/student/events" className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5">
@@ -367,15 +367,14 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {upcomingEvents.slice(0, 3).map(event => (
                   <Link key={event.id} to={`/student/events/${event.id}`}>
-                    <div className="lookap-card p-4 hover:border-purple-400/30 transition-all flex gap-4">
-                      <div className="text-center bg-purple-50 dark:bg-purple-950/40 border border-purple-500/20 rounded-xl px-3 py-2 flex-shrink-0 flex flex-col justify-center">
-                        <p className="text-[10px] font-mono uppercase font-bold text-purple-600 dark:text-purple-400">{safeFormatDate(event.date, 'MMM')}</p>
-                        <p className="text-xl font-bold text-purple-700 dark:text-purple-300 leading-none">{safeFormatDate(event.date, 'dd')}</p>
+                    <div className="lookap-card p-4 hover:border-purple-400/30 transition-all flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center flex-shrink-0">
+                        <Compass className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{event.title}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">{event.time} · {event.venue || 'Campus Main / Online'}</p>
-                        <div className="mt-2 flex items-center gap-2">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">{safeFormatDate(event.date, 'dd MMM yyyy')} · {event.time} · {event.venue || 'Campus Main / Online'}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
                           <span className="spec-tag text-[9px]">
                             {event.status === EventStatus.ALMOST_FULL ? 'LIMITED SEATS' : 'REGISTRATION OPEN'}
                           </span>

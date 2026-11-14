@@ -23,11 +23,6 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
     const studentCountRes = await query(`SELECT count(*)::int FROM users WHERE role = 'student'`)
     const totalStudents = studentCountRes.rows[0]?.count || 0
 
-    const intCountRes = await query(
-      `SELECT count(*)::int FROM interviews WHERE status IN ('Scheduled', 'Confirmed', 'Rescheduled')`
-    )
-    const upcomingInterviews = intCountRes.rows[0]?.count || 0
-
     const certCountRes = await query(`SELECT count(*)::int FROM certificates WHERE status = 'Valid'`)
     const certificatesIssued = certCountRes.rows[0]?.count || 0
 
@@ -35,9 +30,6 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
       `SELECT count(*)::int FROM events WHERE date >= CURRENT_DATE - INTERVAL '1 day'`
     )
     const upcomingEvents = evtCountRes.rows[0]?.count || 0
-
-    const taskCountRes = await query(`SELECT count(*)::int FROM tasks WHERE status IN ('Pending', 'In Progress')`)
-    const pendingTasks = taskCountRes.rows[0]?.count || 0
 
     // Real student registration growth from PostgreSQL
     const growthRes = await query(`
@@ -51,34 +43,14 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
       ? growthRes.rows
       : [{ month: new Date().toLocaleString('en-US', { month: 'short' }), count: totalStudents }]
 
-    // Real interview status breakdown from PostgreSQL
-    const intStatusRes = await query(`
-      SELECT status as name, count(*)::int as value
-      FROM interviews
-      GROUP BY status
-    `)
-    const interviewStatus = intStatusRes.rows
-
-    // Real task status breakdown from PostgreSQL
-    const taskStatusRes = await query(`
-      SELECT status, count(*)::int as count
-      FROM tasks
-      GROUP BY status
-    `)
-    const taskCompletion = taskStatusRes.rows
-
     res.json({
       metrics: {
         totalStudents,
-        upcomingInterviews,
         certificatesIssued,
-        upcomingEvents,
-        pendingTasks
+        upcomingEvents
       },
       charts: {
-        studentGrowth,
-        interviewStatus,
-        taskCompletion
+        studentGrowth
       }
     })
   } catch (err: any) {

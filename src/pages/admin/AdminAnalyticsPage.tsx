@@ -3,12 +3,12 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import {
-  TrendingUp, Users, Award, Calendar, CheckSquare,
+  TrendingUp, Users, Award, Sparkles, ShieldCheck,
   BarChart3, RefreshCw
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
-  CartesianGrid, PieChart, Pie, Cell, LineChart, Line
+  CartesianGrid, LineChart, Line
 } from 'recharts'
 import { apiRequest } from '@/services/api'
 
@@ -26,15 +26,13 @@ export default function AdminAnalyticsPage() {
       setData({
         metrics: {
           totalStudents: 0,
-          upcomingInterviews: 0,
           certificatesIssued: 0,
           upcomingEvents: 0,
-          pendingTasks: 0
+          activeBadges: 0
         },
         charts: {
           studentGrowth: [],
-          interviewStatus: [],
-          taskCompletion: []
+          certificateTypes: []
         }
       })
     } finally {
@@ -46,8 +44,6 @@ export default function AdminAnalyticsPage() {
     loadData()
   }, [])
 
-  const COLORS = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B']
-
   return (
     <div className="max-w-6xl mx-auto space-y-5 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -57,7 +53,7 @@ export default function AdminAnalyticsPage() {
             Program Analytics & Growth Metrics
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Cross-cohort student growth, interview funnel conversions, and task completion velocity.
+            Cross-cohort student growth, cryptographic certificate distribution, and campus event engagement.
           </p>
         </div>
 
@@ -67,17 +63,13 @@ export default function AdminAnalyticsPage() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Students</span>
           <p className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-1">{data?.metrics?.totalStudents ?? 0}</p>
         </Card>
         <Card className="p-4">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Interviews</span>
-          <p className="text-2xl font-black text-blue-600 mt-1">{data?.metrics?.upcomingInterviews ?? 0}</p>
-        </Card>
-        <Card className="p-4">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Certificates</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Certificates Issued</span>
           <p className="text-2xl font-black text-emerald-600 mt-1">{data?.metrics?.certificatesIssued ?? 0}</p>
         </Card>
         <Card className="p-4">
@@ -85,8 +77,8 @@ export default function AdminAnalyticsPage() {
           <p className="text-2xl font-black text-purple-600 mt-1">{data?.metrics?.upcomingEvents ?? 0}</p>
         </Card>
         <Card className="p-4">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Tasks</span>
-          <p className="text-2xl font-black text-amber-600 mt-1">{data?.metrics?.pendingTasks ?? 0}</p>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Digital Badges</span>
+          <p className="text-2xl font-black text-blue-600 mt-1">{data?.metrics?.totalStudents ?? 0}</p>
         </Card>
       </div>
 
@@ -99,7 +91,7 @@ export default function AdminAnalyticsPage() {
               <LineChart data={data?.charts?.studentGrowth || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="month" stroke="#888888" fontSize={11} />
-                <YAxis stroke="#888888" fontSize={11} />
+                <YAxis stroke="#888888" fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Line type="monotone" dataKey="count" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
@@ -108,13 +100,17 @@ export default function AdminAnalyticsPage() {
         </Card>
 
         <Card className="p-5 space-y-3">
-          <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Task Velocity by Status</h3>
+          <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Certificates & Event Engagement</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.charts?.taskCompletion || []}>
+              <BarChart data={[
+                { category: 'Students', count: data?.metrics?.totalStudents ?? 0 },
+                { category: 'Certificates', count: data?.metrics?.certificatesIssued ?? 0 },
+                { category: 'Events', count: data?.metrics?.upcomingEvents ?? 0 }
+              ]}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="status" stroke="#888888" fontSize={11} />
-                <YAxis stroke="#888888" fontSize={11} />
+                <XAxis dataKey="category" stroke="#888888" fontSize={11} />
+                <YAxis stroke="#888888" fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Bar dataKey="count" fill="#10B981" radius={[6, 6, 0, 0]} />
               </BarChart>

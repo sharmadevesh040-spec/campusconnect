@@ -1778,19 +1778,6 @@ router2.use(requireRole("student", "admin", "super_admin"));
 router2.get("/dashboard", async (req, res) => {
   try {
     const studentId = req.user.id;
-    const intRes = await query(
-      `SELECT * FROM interviews 
-       WHERE student_id = $1 AND status IN ('Scheduled', 'Confirmed', 'Rescheduled')
-       ORDER BY date ASC, time ASC LIMIT 1`,
-      [studentId]
-    );
-    const nextInterview = intRes.rows[0] || null;
-    const taskRes = await query(
-      `SELECT * FROM tasks 
-       WHERE student_id = $1 AND status IN ('Pending', 'In Progress')
-       ORDER BY deadline ASC`,
-      [studentId]
-    );
     const certRes = await query(
       `SELECT * FROM certificates 
        WHERE student_id = $1 
@@ -1809,31 +1796,19 @@ router2.get("/dashboard", async (req, res) => {
       [studentId]
     );
     const nextEvent = evtRes.rows[0] || null;
-    const annRes = await query(
-      `SELECT * FROM announcements ORDER BY publish_date DESC LIMIT 5`
-    );
     const noteRes = await query(
       `SELECT count(*)::int FROM notifications WHERE user_id = $1 AND is_read = false`,
       [studentId]
     );
     const unreadCount = noteRes.rows[0]?.count || 0;
-    const totalIntRes = await query(
-      `SELECT count(*)::int FROM interviews WHERE student_id = $1`,
-      [studentId]
-    );
     res.json({
       stats: {
-        upcomingInterviewsCount: totalIntRes.rows[0]?.count || 0,
-        pendingTasksCount: taskRes.rows.length,
         certificatesCount: certRes.rows.length,
         upcomingEventsCount: evtRes.rows.length,
         unreadNotificationsCount: unreadCount
       },
-      nextInterview,
       nextEvent,
-      pendingTasks: taskRes.rows.slice(0, 5),
-      certificates: certRes.rows.slice(0, 4),
-      announcements: annRes.rows.slice(0, 3)
+      certificates: certRes.rows.slice(0, 4)
     });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to load dashboard" });
@@ -2236,18 +2211,12 @@ router3.get("/dashboard", async (_req, res) => {
   try {
     const studentCountRes = await query(`SELECT count(*)::int FROM users WHERE role = 'student'`);
     const totalStudents = studentCountRes.rows[0]?.count || 0;
-    const intCountRes = await query(
-      `SELECT count(*)::int FROM interviews WHERE status IN ('Scheduled', 'Confirmed', 'Rescheduled')`
-    );
-    const upcomingInterviews = intCountRes.rows[0]?.count || 0;
     const certCountRes = await query(`SELECT count(*)::int FROM certificates WHERE status = 'Valid'`);
     const certificatesIssued = certCountRes.rows[0]?.count || 0;
     const evtCountRes = await query(
       `SELECT count(*)::int FROM events WHERE date >= CURRENT_DATE - INTERVAL '1 day'`
     );
     const upcomingEvents = evtCountRes.rows[0]?.count || 0;
-    const taskCountRes = await query(`SELECT count(*)::int FROM tasks WHERE status IN ('Pending', 'In Progress')`);
-    const pendingTasks = taskCountRes.rows[0]?.count || 0;
     const growthRes = await query(`
       SELECT to_char(created_at, 'Mon') as month, count(*)::int as count
       FROM users
@@ -2256,30 +2225,14 @@ router3.get("/dashboard", async (_req, res) => {
       ORDER BY date_trunc('month', created_at) ASC
     `);
     const studentGrowth = growthRes.rows.length > 0 ? growthRes.rows : [{ month: (/* @__PURE__ */ new Date()).toLocaleString("en-US", { month: "short" }), count: totalStudents }];
-    const intStatusRes = await query(`
-      SELECT status as name, count(*)::int as value
-      FROM interviews
-      GROUP BY status
-    `);
-    const interviewStatus = intStatusRes.rows;
-    const taskStatusRes = await query(`
-      SELECT status, count(*)::int as count
-      FROM tasks
-      GROUP BY status
-    `);
-    const taskCompletion = taskStatusRes.rows;
     res.json({
       metrics: {
         totalStudents,
-        upcomingInterviews,
         certificatesIssued,
-        upcomingEvents,
-        pendingTasks
+        upcomingEvents
       },
       charts: {
-        studentGrowth,
-        interviewStatus,
-        taskCompletion
+        studentGrowth
       }
     });
   } catch (err) {

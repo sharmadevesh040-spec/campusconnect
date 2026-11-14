@@ -39,7 +39,7 @@ export function SearchPalette({ isOpen, onClose }: SearchPaletteProps) {
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search pages, interviews, certificates..."
+            placeholder="Search pages, certificates, events..."
             className="flex-1 bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none"
           />
           <div className="flex items-center gap-2">
