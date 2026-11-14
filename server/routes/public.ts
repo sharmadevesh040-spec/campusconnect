@@ -6,6 +6,7 @@ import { query } from '../db'
 import { getFilePath, verifySignedDownload } from '../storage'
 import { generateCertificatePdfBuffer } from '../storage/pdfGenerator'
 import type { AuthenticatedUser } from '../middleware/auth'
+import { verifyCertificateTool } from '../mcp/certificateTools'
 
 const router = Router()
 const JWT_SECRET = process.env.AUTH_SECRET || 'campusconnect-jwt-secret-key-2026'
@@ -15,48 +16,31 @@ router.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'CampusConnect API', timestamp: new Date().toISOString() })
 })
 
-// GET /api/verify/:certificateId (Public Certificate Verification — Real PostgreSQL DB)
+// GET /api/verify/:certificateId (Public Certificate Verification via MCP)
 router.get('/verify/:certificateId', async (req: Request, res: Response): Promise<void> => {
   try {
     const certCode = req.params.certificateId.trim()
-    const result = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as student_name, 
-              p.university as student_university, 
-              p.student_id as student_code
-       FROM certificates c
-       LEFT JOIN profiles p ON (c.student_id = p.user_id OR c.student_id = p.student_id)
-       WHERE LOWER(c.certificate_id) = LOWER($1)`,
-      [certCode]
-    )
+    const result = await verifyCertificateTool({ certificate_id: certCode })
 
-    if (result.rows.length === 0) {
-      res.status(404).json({
+    if (!result.verified) {
+      res.status(result.statusCode || 404).json({
         verified: false,
-        error: 'Certificate not found',
+        error: result.error || 'Certificate not found',
         message: 'No record matching this Certificate ID was found in the official registry.'
       })
       return
     }
 
-    const cert = result.rows[0]
-
     res.json({
-      verified: cert.status === 'Valid',
-      status: cert.status, // Valid, Revoked, Expired
-      certificateId: cert.certificate_id,
-      title: cert.title || cert.certificate_name,
-      certificateName: cert.certificate_name || cert.title,
-      type: cert.type || 'Ambassador Credential',
-      program: cert.program,
-      description: cert.description,
-      issueDate: cert.issue_date,
-      studentName: cert.student_name || 'Authorized Recipient',
-      studentUniversity: cert.student_university || 'CampusConnect Ambassador Network',
-      studentCode: cert.student_code || 'VERIFIED-AMBASSADOR',
-      qrCode: cert.qr_code,
+      verified: true,
+      status: result.status,
+      certificateId: result.certificate_id,
+      title: result.certificate_name,
+      certificateName: result.certificate_name,
+      studentName: result.student_name,
+      university: result.university,
+      program: result.program,
+      issueDate: result.issue_date,
       verifiedAt: new Date().toISOString()
     })
   } catch (err: any) {

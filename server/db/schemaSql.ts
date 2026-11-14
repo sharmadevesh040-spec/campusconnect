@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS certificates (
     description TEXT,
     storage_key VARCHAR(255),
     file_key VARCHAR(255),
+    file_path VARCHAR(255),
     file_url TEXT NOT NULL,
     qr_code TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'Valid',

@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS certificates (
     description TEXT,
     storage_key VARCHAR(255),
     file_key VARCHAR(255),
+    file_path VARCHAR(255),
     file_url TEXT NOT NULL,
     qr_code TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'Valid',
@@ -245,6 +246,24 @@ var FallbackStore = class {
         role: "super_admin",
         is_verified: true,
         created_at: /* @__PURE__ */ new Date()
+      },
+      {
+        id: "u-rahul-cc20260045",
+        email: "rahul@campusconnect.edu",
+        password_hash: "$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C",
+        // student123
+        role: "student",
+        is_verified: true,
+        created_at: /* @__PURE__ */ new Date()
+      },
+      {
+        id: "u-amit-cc20260046",
+        email: "amit@campusconnect.edu",
+        password_hash: "$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C",
+        // student123
+        role: "student",
+        is_verified: true,
+        created_at: /* @__PURE__ */ new Date()
       }
     ],
     profiles: [
@@ -264,6 +283,42 @@ var FallbackStore = class {
         bio: "Campus Ambassador Lead & Executive Director",
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA",
         completion_pct: 100,
+        is_active: true
+      },
+      {
+        id: "prof-rahul",
+        user_id: "u-rahul-cc20260045",
+        full_name: "Rahul Sharma",
+        student_id: "CC20260045",
+        phone: "+91 9876543211",
+        university: "Delhi Technological University",
+        college: "School of Engineering",
+        course: "B.Tech",
+        branch: "Computer Science",
+        year: 3,
+        semester: 5,
+        skills: ["Python", "Cloud Computing", "Web Development"],
+        bio: "Google Student Ambassador Candidate & Tech Fellow",
+        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma",
+        completion_pct: 90,
+        is_active: true
+      },
+      {
+        id: "prof-amit",
+        user_id: "u-amit-cc20260046",
+        full_name: "Amit Kumar",
+        student_id: "CC20260046",
+        phone: "+91 9876543212",
+        university: "Delhi Technological University",
+        college: "School of Engineering",
+        course: "B.Tech",
+        branch: "Information Technology",
+        year: 3,
+        semester: 5,
+        skills: ["Fullstack", "Cybersecurity", "DevOps"],
+        bio: "Campus Ambassador & IT Scholar",
+        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar",
+        completion_pct: 90,
         is_active: true
       }
     ],
@@ -430,6 +485,7 @@ var FallbackStore = class {
           certificate_type: c.certificate_type || c.type || "Ambassador",
           file_key: c.file_key || c.storage_key,
           storage_key: c.storage_key || c.file_key,
+          file_path: c.file_path || c.file_key || c.storage_key,
           studentName: prof.full_name || "Student Recipient",
           studentEmail: stu.email || "",
           studentCode: prof.student_id || "GSA-2026-001",
@@ -516,6 +572,7 @@ var FallbackStore = class {
         description: description || "",
         storage_key: resolvedKey,
         file_key: resolvedKey,
+        file_path: resolvedKey,
         file_url: file_url || `/api/student/certificates/${certificate_id}/download`,
         qr_code,
         status: "Valid",
@@ -525,6 +582,49 @@ var FallbackStore = class {
       this.data.certificates.push(newCert);
       this.save();
       return { rows: [newCert], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("delete from certificates")) {
+      const idParam = params[0] ? String(params[0]).trim().toLowerCase() : null;
+      if (idParam) {
+        this.data.certificates = this.data.certificates.filter(
+          (c) => String(c.id).toLowerCase() !== idParam && String(c.certificate_id).toLowerCase() !== idParam
+        );
+      }
+      this.save();
+      return { rows: [], command: "DELETE", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("update certificates")) {
+      const idParam = params[params.length - 1] ? String(params[params.length - 1]).trim().toLowerCase() : null;
+      for (const c of this.data.certificates) {
+        if (String(c.id).toLowerCase() === idParam || String(c.certificate_id).toLowerCase() === idParam) {
+          if (lower.includes("status = 'revoked'")) {
+            c.status = "Revoked";
+          } else if (lower.includes("status =")) {
+            const m = text.match(/status\s*=\s*'([^']+)'/i);
+            if (m) c.status = m[1];
+          }
+          if (lower.includes("title =") && params[0]) c.title = params[0];
+          c.updated_at = /* @__PURE__ */ new Date();
+        }
+      }
+      this.save();
+      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("insert into audit_logs")) {
+      const [user_id, action, resource, resource_id, metadata, ip_address] = params;
+      const newLog = {
+        id: "log-" + Date.now(),
+        user_id,
+        action,
+        resource,
+        resource_id,
+        metadata: typeof metadata === "string" ? JSON.parse(metadata) : metadata,
+        ip_address,
+        created_at: /* @__PURE__ */ new Date()
+      };
+      this.data.audit_logs.push(newLog);
+      this.save();
+      return { rows: [newLog], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
     for (const table of Object.keys(this.data)) {
       if (lower.startsWith(`select * from ${table}`) || lower.includes(`from ${table}`)) {
@@ -563,6 +663,8 @@ async function runMigration() {
     await pool.query(`
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
     `).catch(() => {
     });
     console.log("[Migration] Schema migration completed successfully.");
@@ -599,6 +701,52 @@ async function seedDatabase() {
         bio: "Designated Sole Super Administrator of CampusConnect.",
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA",
         completion_pct: 100,
+        is_active: true
+      }
+    },
+    {
+      id: "u-rahul-cc20260045",
+      email: "rahul@campusconnect.edu",
+      password_hash: studentPass,
+      role: "student",
+      is_verified: true,
+      profile: {
+        full_name: "Rahul Sharma",
+        student_id: "CC20260045",
+        phone: "+91 98765 43211",
+        university: "Delhi Technological University",
+        college: "School of Engineering",
+        course: "B.Tech",
+        branch: "Computer Science",
+        year: 3,
+        semester: 5,
+        skills: ["Python", "Cloud Computing", "Web Development"],
+        bio: "Google Student Ambassador Candidate & Tech Fellow",
+        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma",
+        completion_pct: 90,
+        is_active: true
+      }
+    },
+    {
+      id: "u-amit-cc20260046",
+      email: "amit@campusconnect.edu",
+      password_hash: studentPass,
+      role: "student",
+      is_verified: true,
+      profile: {
+        full_name: "Amit Kumar",
+        student_id: "CC20260046",
+        phone: "+91 98765 43212",
+        university: "Delhi Technological University",
+        college: "School of Engineering",
+        course: "B.Tech",
+        branch: "Information Technology",
+        year: 3,
+        semester: 5,
+        skills: ["Fullstack", "Cybersecurity", "DevOps"],
+        bio: "Campus Ambassador & IT Scholar",
+        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar",
+        completion_pct: 90,
         is_active: true
       }
     }
@@ -1563,65 +1711,6 @@ var auth_default = router;
 import { Router as Router2 } from "express";
 import fs3 from "fs";
 
-// server/storage/index.ts
-import fs2 from "fs";
-import path2 from "path";
-import os2 from "os";
-import crypto2 from "crypto";
-var isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
-var UPLOAD_DIR = isServerless ? path2.join(os2.tmpdir(), "uploads") : path2.resolve(process.cwd(), "uploads");
-var CERT_DIR = path2.join(UPLOAD_DIR, "certificates");
-var AVATAR_DIR = path2.join(UPLOAD_DIR, "avatars");
-var DOCS_DIR = path2.join(UPLOAD_DIR, "documents");
-try {
-  for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
-    if (!fs2.existsSync(dir)) {
-      fs2.mkdirSync(dir, { recursive: true });
-    }
-  }
-} catch (err) {
-}
-async function saveFile(buffer, originalName, category = "documents") {
-  const ext = path2.extname(originalName) || ".pdf";
-  const fileKey = `${category}/${Date.now()}-${crypto2.randomBytes(8).toString("hex")}${ext}`;
-  const targetPath = path2.join(UPLOAD_DIR, fileKey);
-  const targetDir = path2.dirname(targetPath);
-  if (!fs2.existsSync(targetDir)) {
-    fs2.mkdirSync(targetDir, { recursive: true });
-  }
-  fs2.writeFileSync(targetPath, buffer);
-  return {
-    fileKey,
-    fileName: originalName,
-    mimeType: ext === ".pdf" ? "application/pdf" : "application/octet-stream",
-    size: buffer.length,
-    fileUrl: `/api/storage/files/${fileKey}`
-  };
-}
-function getFilePath(fileKey) {
-  const fullPath = path2.join(UPLOAD_DIR, fileKey);
-  if (fs2.existsSync(fullPath)) {
-    return fullPath;
-  }
-  return null;
-}
-function generateSignedDownloadUrl(fileKey, studentId) {
-  const expires = Date.now() + 1e3 * 60 * 60;
-  const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
-  const hmac = crypto2.createHmac("sha256", secret);
-  hmac.update(`${fileKey}:${studentId}:${expires}`);
-  const signature = hmac.digest("hex");
-  return `/api/storage/download?key=${encodeURIComponent(fileKey)}&expires=${expires}&sig=${signature}&user=${encodeURIComponent(studentId)}`;
-}
-function verifySignedDownload(fileKey, studentId, expires, sig) {
-  if (Date.now() > expires) return false;
-  const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
-  const hmac = crypto2.createHmac("sha256", secret);
-  hmac.update(`${fileKey}:${studentId}:${expires}`);
-  const expectedSig = hmac.digest("hex");
-  return crypto2.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig));
-}
-
 // server/storage/pdfGenerator.ts
 function generateCertificatePdfBuffer(cert) {
   const student = (cert.studentName || "Recipient").toUpperCase();
@@ -1771,6 +1860,476 @@ ${400 + streamLength}
   return Buffer.from(pdf, "utf-8");
 }
 
+// server/mcp/certificateTools.ts
+import crypto3 from "crypto";
+
+// server/storage/index.ts
+import fs2 from "fs";
+import path2 from "path";
+import os2 from "os";
+import crypto2 from "crypto";
+var isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
+var UPLOAD_DIR = isServerless ? path2.join(os2.tmpdir(), "uploads") : path2.resolve(process.cwd(), "uploads");
+var CERT_DIR = path2.join(UPLOAD_DIR, "certificates");
+var AVATAR_DIR = path2.join(UPLOAD_DIR, "avatars");
+var DOCS_DIR = path2.join(UPLOAD_DIR, "documents");
+try {
+  for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
+    if (!fs2.existsSync(dir)) {
+      fs2.mkdirSync(dir, { recursive: true });
+    }
+  }
+} catch (err) {
+}
+async function saveCertificateFile(buffer, studentId, certificateId) {
+  const safeStudentId = String(studentId).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const safeCertId = String(certificateId).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const fileKey = `certificates/${safeStudentId}/${safeCertId}.pdf`;
+  const targetPath = path2.join(UPLOAD_DIR, fileKey);
+  const targetDir = path2.dirname(targetPath);
+  if (!fs2.existsSync(targetDir)) {
+    fs2.mkdirSync(targetDir, { recursive: true });
+  }
+  fs2.writeFileSync(targetPath, buffer);
+  return {
+    fileKey,
+    filePath: targetPath,
+    size: buffer.length
+  };
+}
+function deleteCertificateFile(fileKeyOrPath) {
+  try {
+    const fullPath = fileKeyOrPath.startsWith(UPLOAD_DIR) ? fileKeyOrPath : path2.join(UPLOAD_DIR, fileKeyOrPath);
+    if (fs2.existsSync(fullPath)) {
+      fs2.unlinkSync(fullPath);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[Storage] Failed to delete certificate file:", err);
+  }
+  return false;
+}
+async function saveFile(buffer, originalName, category = "documents") {
+  const ext = path2.extname(originalName) || ".pdf";
+  const fileKey = `${category}/${Date.now()}-${crypto2.randomBytes(8).toString("hex")}${ext}`;
+  const targetPath = path2.join(UPLOAD_DIR, fileKey);
+  const targetDir = path2.dirname(targetPath);
+  if (!fs2.existsSync(targetDir)) {
+    fs2.mkdirSync(targetDir, { recursive: true });
+  }
+  fs2.writeFileSync(targetPath, buffer);
+  return {
+    fileKey,
+    fileName: originalName,
+    mimeType: ext === ".pdf" ? "application/pdf" : "application/octet-stream",
+    size: buffer.length,
+    fileUrl: `/api/storage/files/${fileKey}`
+  };
+}
+function getFilePath(fileKey) {
+  const fullPath = path2.join(UPLOAD_DIR, fileKey);
+  if (fs2.existsSync(fullPath)) {
+    return fullPath;
+  }
+  return null;
+}
+function generateSignedDownloadUrl(fileKey, studentId) {
+  const expires = Date.now() + 1e3 * 60 * 60;
+  const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
+  const hmac = crypto2.createHmac("sha256", secret);
+  hmac.update(`${fileKey}:${studentId}:${expires}`);
+  const signature = hmac.digest("hex");
+  return `/api/storage/download?key=${encodeURIComponent(fileKey)}&expires=${expires}&sig=${signature}&user=${encodeURIComponent(studentId)}`;
+}
+function verifySignedDownload(fileKey, studentId, expires, sig) {
+  if (Date.now() > expires) return false;
+  const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
+  const hmac = crypto2.createHmac("sha256", secret);
+  hmac.update(`${fileKey}:${studentId}:${expires}`);
+  const expectedSig = hmac.digest("hex");
+  return crypto2.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig));
+}
+
+// server/mcp/certificateTools.ts
+async function uploadCertificateTool(params) {
+  const {
+    student_id,
+    certificate_name,
+    issue_date,
+    certificate_file,
+    caller_user_id = "system-admin",
+    caller_role = "admin",
+    certificate_type = "Ambassador",
+    program = "CampusConnect Ambassador Program 2026",
+    description = ""
+  } = params;
+  const isPrivileged = caller_role === "admin" || caller_role === "super_admin";
+  if (!isPrivileged) {
+    return {
+      success: false,
+      statusCode: 403,
+      error: "Forbidden: Only authorized administrators can upload and issue certificates"
+    };
+  }
+  if (!student_id || !student_id.trim()) {
+    return { success: false, statusCode: 400, error: "Student ID or recipient is required" };
+  }
+  if (!certificate_name || !certificate_name.trim()) {
+    return { success: false, statusCode: 400, error: "Certificate name is required" };
+  }
+  if (!issue_date || !issue_date.trim()) {
+    return { success: false, statusCode: 400, error: "Issue date is required" };
+  }
+  if (!certificate_file) {
+    return { success: false, statusCode: 400, error: "Certificate PDF file is required" };
+  }
+  const studentLookup = student_id.trim();
+  const stuRes = await query(
+    `SELECT u.id, u.email, p.student_id as "studentCode", p.full_name as "fullName", p.university
+     FROM users u
+     LEFT JOIN profiles p ON u.id = p.user_id
+     WHERE u.id = $1 OR LOWER(p.student_id) = LOWER($1) OR LOWER(u.email) = LOWER($1)`,
+    [studentLookup]
+  );
+  if (stuRes.rows.length === 0) {
+    return {
+      success: false,
+      statusCode: 404,
+      error: `Student '${studentLookup}' not found in registered accounts. Please verify the student ID, email, or database ID.`
+    };
+  }
+  const student = stuRes.rows[0];
+  const resolvedUserId = student.id;
+  const resolvedStudentCode = student.studentCode || studentLookup;
+  const resolvedStudentName = student.fullName || student.email;
+  let fileBuffer;
+  if (Buffer.isBuffer(certificate_file)) {
+    fileBuffer = certificate_file;
+  } else if (typeof certificate_file === "string") {
+    const base64Data = certificate_file.replace(/^data:application\/pdf;base64,/, "").trim();
+    fileBuffer = Buffer.from(base64Data, "base64");
+  } else {
+    return { success: false, statusCode: 400, error: "Invalid file data: Buffer or base64 PDF required" };
+  }
+  if (fileBuffer.length === 0) {
+    return { success: false, statusCode: 400, error: "Uploaded certificate file is empty" };
+  }
+  if (fileBuffer.length > 15 * 1024 * 1024) {
+    return { success: false, statusCode: 400, error: "File size exceeds maximum limit of 15MB" };
+  }
+  const header = fileBuffer.slice(0, 5).toString("ascii");
+  if (!header.startsWith("%PDF-")) {
+    return { success: false, statusCode: 400, error: "Invalid file format: Only valid PDF documents are allowed" };
+  }
+  const certIdCode = `CERT-2026-${crypto3.randomBytes(3).toString("hex").toUpperCase()}`;
+  const newDbId = `cert-${Date.now()}-${crypto3.randomBytes(4).toString("hex")}`;
+  let stored;
+  try {
+    stored = await saveCertificateFile(fileBuffer, resolvedStudentCode, certIdCode);
+  } catch (err) {
+    return {
+      success: false,
+      statusCode: 500,
+      error: `Storage upload failed: ${err.message || "Unable to write file to private storage"}`
+    };
+  }
+  try {
+    const fileUrl = `/api/student/certificates/${certIdCode}/download`;
+    const insertRes = await query(
+      `INSERT INTO certificates (
+        id, certificate_id, student_id, title, certificate_name, certificate_type, type, program, issue_date, description, storage_key, file_key, file_path, file_url, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'Valid')
+      RETURNING *`,
+      [
+        newDbId,
+        certIdCode,
+        resolvedUserId,
+        certificate_name.trim(),
+        certificate_name.trim(),
+        certificate_type,
+        certificate_type,
+        program,
+        issue_date,
+        description,
+        stored.fileKey,
+        stored.fileKey,
+        stored.filePath,
+        fileUrl
+      ]
+    );
+    await logAudit(
+      caller_user_id,
+      "CERTIFICATE_UPLOADED",
+      "certificates",
+      certIdCode,
+      {
+        studentId: resolvedStudentCode,
+        studentName: resolvedStudentName,
+        title: certificate_name,
+        filePath: stored.filePath
+      }
+    );
+    const row = insertRes.rows[0] || {};
+    return {
+      success: true,
+      statusCode: 201,
+      message: `Certificate successfully issued and linked to student ${resolvedStudentName} (${resolvedStudentCode})`,
+      certificate: {
+        id: row.id || newDbId,
+        certificate_id: certIdCode,
+        student_id: resolvedUserId,
+        student_code: resolvedStudentCode,
+        student_name: resolvedStudentName,
+        certificate_name: certificate_name.trim(),
+        title: certificate_name.trim(),
+        issue_date,
+        file_path: stored.filePath,
+        file_key: stored.fileKey,
+        status: "Valid",
+        download_url: fileUrl,
+        view_url: `/api/student/certificates/${certIdCode}/view`
+      }
+    };
+  } catch (err) {
+    deleteCertificateFile(stored.fileKey);
+    return {
+      success: false,
+      statusCode: 500,
+      error: `Database insertion failed: ${err.message}. The storage file has been rolled back.`
+    };
+  }
+}
+async function getMyCertificatesTool(params) {
+  const { authenticated_user_id } = params;
+  if (!authenticated_user_id) {
+    return {
+      success: false,
+      statusCode: 401,
+      error: "Unauthorized: Authentication required to retrieve certificates"
+    };
+  }
+  const stuRes = await query(
+    `SELECT u.id, u.email, p.student_id as "studentCode", p.full_name as "fullName", p.university
+     FROM users u
+     LEFT JOIN profiles p ON u.id = p.user_id
+     WHERE u.id = $1`,
+    [authenticated_user_id]
+  );
+  if (stuRes.rows.length === 0) {
+    return {
+      success: true,
+      student_id: authenticated_user_id,
+      count: 0,
+      certificates: []
+    };
+  }
+  const student = stuRes.rows[0];
+  const studentCode = student.studentCode || "";
+  const studentEmail = (student.email || "").toLowerCase();
+  const certRes = await query(
+    `SELECT c.*,
+            COALESCE(c.title, c.certificate_name) as title,
+            COALESCE(c.certificate_name, c.title) as certificate_name,
+            COALESCE(c.type, c.certificate_type, 'Ambassador') as type,
+            COALESCE(c.certificate_type, c.type, 'Ambassador') as certificate_type,
+            COALESCE(c.file_path, c.file_key, c.storage_key) as file_path,
+            COALESCE(c.file_key, c.storage_key) as file_key,
+            $4::text as "studentName",
+            $3::text as "studentEmail",
+            $2::text as "studentCode"
+     FROM certificates c
+     WHERE c.student_id = $1 
+        OR c.student_id = $2 
+        OR LOWER(c.student_id) = $3
+     ORDER BY c.issue_date DESC, c.created_at DESC`,
+    [authenticated_user_id, studentCode, studentEmail, student.fullName || "Student Recipient"]
+  );
+  const certificates = certRes.rows.map((c) => ({
+    id: c.id,
+    certificate_id: c.certificate_id,
+    certificate_name: c.certificate_name || c.title,
+    title: c.title || c.certificate_name,
+    type: c.type,
+    program: c.program,
+    issue_date: c.issue_date,
+    status: c.status,
+    file_path: c.file_path,
+    file_key: c.file_key,
+    download_url: `/api/student/certificates/${c.certificate_id || c.id}/download`,
+    view_url: `/api/student/certificates/${c.certificate_id || c.id}/view`,
+    created_at: c.created_at
+  }));
+  return {
+    success: true,
+    statusCode: 200,
+    student_id: studentCode || authenticated_user_id,
+    student_name: student.fullName || student.email,
+    count: certificates.length,
+    certificates
+  };
+}
+async function getCertificateTool(params) {
+  const { certificate_id, caller_user_id, caller_role = "student" } = params;
+  if (!certificate_id || !certificate_id.trim()) {
+    return { success: false, statusCode: 400, error: "Certificate ID is required" };
+  }
+  if (!caller_user_id) {
+    return { success: false, statusCode: 401, error: "Authentication required to access certificate" };
+  }
+  const certRes = await query(
+    `SELECT c.*,
+            COALESCE(c.title, c.certificate_name) as title,
+            COALESCE(c.certificate_name, c.title) as certificate_name,
+            COALESCE(c.type, c.certificate_type, 'Ambassador') as type,
+            COALESCE(c.file_path, c.file_key, c.storage_key) as file_path,
+            COALESCE(c.file_key, c.storage_key) as file_key,
+            p.full_name as "studentName",
+            u.email as "studentEmail",
+            p.student_id as "studentCode"
+     FROM certificates c
+     LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
+     LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
+     WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
+    [certificate_id.trim()]
+  );
+  if (certRes.rows.length === 0) {
+    return { success: false, statusCode: 404, error: "Certificate not found" };
+  }
+  const cert = certRes.rows[0];
+  const callerRes = await query(
+    `SELECT u.id, u.email, u.role, p.student_id as "studentCode"
+     FROM users u
+     LEFT JOIN profiles p ON u.id = p.user_id
+     WHERE u.id = $1`,
+    [caller_user_id]
+  );
+  const caller = callerRes.rows[0] || { id: caller_user_id, role: caller_role };
+  const isPrivileged = caller.role === "admin" || caller.role === "super_admin";
+  const ownsCert = cert.student_id === caller_user_id || caller.studentCode && cert.studentCode === caller.studentCode || caller.studentCode && cert.student_id === caller.studentCode || caller.email && cert.studentEmail?.toLowerCase() === caller.email.toLowerCase();
+  if (!isPrivileged && !ownsCert) {
+    return {
+      success: false,
+      statusCode: 403,
+      error: "Forbidden: You do not have permission to access another student certificate"
+    };
+  }
+  const fileKey = cert.file_key || `certificates/${cert.certificate_id}.pdf`;
+  const physicalPath = getFilePath(fileKey) || cert.file_path;
+  const signedUrl = generateSignedDownloadUrl(fileKey, cert.student_id);
+  await logAudit(
+    caller_user_id,
+    "CERTIFICATE_VIEWED",
+    "certificates",
+    cert.certificate_id,
+    { callerRole: caller.role, isOwner: ownsCert }
+  );
+  return {
+    success: true,
+    statusCode: 200,
+    certificate: {
+      id: cert.id,
+      certificate_id: cert.certificate_id,
+      certificate_name: cert.certificate_name || cert.title,
+      title: cert.title || cert.certificate_name,
+      student_id: cert.student_id,
+      student_name: cert.studentName || "Student Recipient",
+      student_code: cert.studentCode || cert.student_id,
+      issue_date: cert.issue_date,
+      status: cert.status,
+      file_path: physicalPath,
+      file_key: fileKey,
+      signed_url: signedUrl,
+      download_url: `/api/student/certificates/${cert.certificate_id}/download`,
+      view_url: `/api/student/certificates/${cert.certificate_id}/view`
+    }
+  };
+}
+async function deleteCertificateTool(params) {
+  const { certificate_id, caller_user_id, caller_role } = params;
+  const isPrivileged = caller_role === "admin" || caller_role === "super_admin";
+  if (!isPrivileged) {
+    return {
+      success: false,
+      statusCode: 403,
+      error: "Forbidden: Only administrators can delete certificates"
+    };
+  }
+  if (!certificate_id || !certificate_id.trim()) {
+    return { success: false, statusCode: 400, error: "Certificate ID is required" };
+  }
+  const check = await query(
+    `SELECT * FROM certificates WHERE id = $1 OR LOWER(certificate_id) = LOWER($1)`,
+    [certificate_id.trim()]
+  );
+  if (check.rows.length === 0) {
+    return { success: false, statusCode: 404, error: "Certificate not found" };
+  }
+  const cert = check.rows[0];
+  const fileKey = cert.file_key || cert.storage_key || `certificates/${cert.certificate_id}.pdf`;
+  const filePath = cert.file_path || fileKey;
+  await query(`DELETE FROM certificates WHERE id = $1`, [cert.id]);
+  deleteCertificateFile(filePath);
+  deleteCertificateFile(fileKey);
+  await logAudit(
+    caller_user_id,
+    "CERTIFICATE_DELETED",
+    "certificates",
+    cert.certificate_id,
+    { title: cert.title || cert.certificate_name, studentId: cert.student_id }
+  );
+  return {
+    success: true,
+    statusCode: 200,
+    message: `Certificate ${cert.certificate_id} successfully deleted from database and private storage`
+  };
+}
+async function verifyCertificateTool(params) {
+  const { certificate_id } = params;
+  if (!certificate_id || !certificate_id.trim()) {
+    return {
+      verified: false,
+      statusCode: 400,
+      error: "Certificate ID is required for verification"
+    };
+  }
+  const check = await query(
+    `SELECT c.id, c.certificate_id,
+            COALESCE(c.certificate_name, c.title) as certificate_name,
+            c.issue_date, c.status, c.program, c.type,
+            p.full_name as "studentName",
+            p.university as "studentUniversity"
+     FROM certificates c
+     LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
+     LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
+     WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
+    [certificate_id.trim()]
+  );
+  if (check.rows.length === 0) {
+    return {
+      verified: false,
+      statusCode: 404,
+      error: "Invalid Certificate: Not found in the official university registry"
+    };
+  }
+  const cert = check.rows[0];
+  const isValid = cert.status === "Valid";
+  await logAudit(null, "CERTIFICATE_VERIFIED", "certificates", cert.certificate_id, {
+    status: cert.status,
+    verified: isValid
+  });
+  return {
+    verified: isValid,
+    statusCode: isValid ? 200 : 400,
+    certificate_id: cert.certificate_id,
+    certificate_name: cert.certificate_name,
+    student_name: cert.studentName || "Student Recipient",
+    university: cert.studentUniversity || "CampusConnect Ambassador Network",
+    program: cert.program || "Official Academic Program",
+    issue_date: cert.issue_date,
+    status: cert.status
+  };
+}
+
 // server/routes/student.ts
 var router2 = Router2();
 router2.use(requireAuth);
@@ -1846,75 +2405,46 @@ router2.get("/interviews/:id", async (req, res) => {
 });
 router2.get("/certificates", async (req, res) => {
   try {
-    const studentId = req.user.id;
-    const resSql = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as "studentName", 
-              u.email as "studentEmail", 
-              p.student_id as "studentCode",
-              p.university as "studentUniversity"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.student_id = $1 
-          OR c.student_id IN (SELECT student_id FROM profiles WHERE user_id = $1)
-          OR c.student_id IN (SELECT email FROM users WHERE id = $1)
-       ORDER BY c.issue_date DESC, c.created_at DESC`,
-      [studentId]
-    );
-    res.json(resSql.rows);
+    const result = await getMyCertificatesTool({
+      authenticated_user_id: req.user.id,
+      caller_role: req.user.role
+    });
+    if (!result.success) {
+      res.status(result.statusCode || 400).json({ error: result.error });
+      return;
+    }
+    res.json(result.certificates);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 router2.get("/certificates/:id/view", async (req, res) => {
   try {
-    const studentId = req.user.id;
-    const isPrivileged = req.user.role === "admin" || req.user.role === "super_admin";
-    const resSql = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as "studentName", 
-              u.email as "studentEmail", 
-              p.student_id as "studentCode",
-              p.university as "studentUniversity"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
-      [req.params.id]
-    );
-    if (resSql.rows.length === 0) {
-      res.status(404).json({ error: "Certificate not found" });
+    const result = await getCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user.id,
+      caller_role: req.user.role
+    });
+    if (!result.success) {
+      res.status(result.statusCode || 403).json({ error: result.error });
       return;
     }
-    const cert = resSql.rows[0];
-    const ownsCert = cert.student_id === studentId || cert.studentCode === req.user.studentId || cert.studentEmail?.toLowerCase() === req.user.email.toLowerCase();
-    if (!isPrivileged && !ownsCert) {
-      res.status(403).json({ error: "Forbidden: You cannot access another student certificate" });
-      return;
-    }
+    const cert = result.certificate;
     const filename = `${cert.certificate_id}.pdf`;
-    if (cert.file_key) {
-      const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs3.existsSync(physicalPath)) {
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-        fs3.createReadStream(physicalPath).pipe(res);
-        return;
-      }
+    if (cert.file_path && fs3.existsSync(cert.file_path)) {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      fs3.createReadStream(cert.file_path).pipe(res);
+      return;
     }
     const pdfBuffer = generateCertificatePdfBuffer({
-      studentName: cert.studentName,
-      title: cert.title || cert.certificate_name,
-      type: cert.type,
+      studentName: cert.student_name,
+      title: cert.certificate_name || cert.title,
+      type: cert.type || "Ambassador",
       certificate_id: cert.certificate_id,
-      program: cert.program,
+      program: cert.program || "CampusConnect Ambassador Program",
       issue_date: cert.issue_date,
-      studentUniversity: cert.studentUniversity
+      studentUniversity: "Delhi Technological University"
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
@@ -1925,52 +2455,33 @@ router2.get("/certificates/:id/view", async (req, res) => {
 });
 router2.get("/certificates/:id/download", async (req, res) => {
   try {
-    const studentId = req.user.id;
-    const isPrivileged = req.user.role === "admin" || req.user.role === "super_admin";
-    const resSql = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as "studentName", 
-              u.email as "studentEmail", 
-              p.student_id as "studentCode",
-              p.university as "studentUniversity"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
-      [req.params.id]
-    );
-    if (resSql.rows.length === 0) {
-      res.status(404).json({ error: "Certificate not found" });
+    const result = await getCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user.id,
+      caller_role: req.user.role
+    });
+    if (!result.success) {
+      res.status(result.statusCode || 403).json({ error: result.error });
       return;
     }
-    const cert = resSql.rows[0];
-    const ownsCert = cert.student_id === studentId || cert.studentCode === req.user.studentId || cert.studentEmail?.toLowerCase() === req.user.email.toLowerCase();
-    if (!isPrivileged && !ownsCert) {
-      res.status(403).json({ error: "Forbidden: You cannot access another student certificate" });
-      return;
-    }
-    const studentNameClean = (cert.studentName || "Student").replace(/[^a-zA-Z0-9]/g, "_");
-    const titleClean = (cert.title || cert.certificate_name || "Certificate").replace(/[^a-zA-Z0-9]/g, "_");
+    const cert = result.certificate;
+    const studentNameClean = (cert.student_name || "Student").replace(/[^a-zA-Z0-9]/g, "_");
+    const titleClean = (cert.certificate_name || "Certificate").replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`;
-    if (cert.file_key) {
-      const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs3.existsSync(physicalPath)) {
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-        fs3.createReadStream(physicalPath).pipe(res);
-        return;
-      }
+    if (cert.file_path && fs3.existsSync(cert.file_path)) {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      fs3.createReadStream(cert.file_path).pipe(res);
+      return;
     }
     const pdfBuffer = generateCertificatePdfBuffer({
-      studentName: cert.studentName,
-      title: cert.title || cert.certificate_name,
-      type: cert.type,
+      studentName: cert.student_name,
+      title: cert.certificate_name || cert.title,
+      type: cert.type || "Ambassador",
       certificate_id: cert.certificate_id,
-      program: cert.program,
+      program: cert.program || "CampusConnect Ambassador Program",
       issue_date: cert.issue_date,
-      studentUniversity: cert.studentUniversity
+      studentUniversity: "Delhi Technological University"
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -1981,31 +2492,18 @@ router2.get("/certificates/:id/download", async (req, res) => {
 });
 router2.get("/certificates/:id/signed-url", async (req, res) => {
   try {
-    const studentId = req.user.id;
-    const isPrivileged = req.user.role === "admin" || req.user.role === "super_admin";
-    const resSql = await query(
-      `SELECT c.*, p.full_name as "studentName", u.email as "studentEmail", p.student_id as "studentCode"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
-      [req.params.id]
-    );
-    if (resSql.rows.length === 0) {
-      res.status(404).json({ error: "Certificate not found" });
+    const result = await getCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user.id,
+      caller_role: req.user.role
+    });
+    if (!result.success) {
+      res.status(result.statusCode || 403).json({ error: result.error });
       return;
     }
-    const cert = resSql.rows[0];
-    const ownsCert = cert.student_id === studentId || cert.studentCode === req.user.studentId || cert.studentEmail?.toLowerCase() === req.user.email.toLowerCase();
-    if (!isPrivileged && !ownsCert) {
-      res.status(403).json({ error: "Forbidden: You cannot access another student certificate" });
-      return;
-    }
-    const fileKey = cert.file_key || `certificates/${cert.certificate_id}.pdf`;
-    const signedUrl = generateSignedDownloadUrl(fileKey, studentId);
     res.json({
-      signedUrl,
-      certificateId: cert.certificate_id,
+      signedUrl: result.certificate.signed_url,
+      certificateId: result.certificate.certificate_id,
       expiresIn: 3600
     });
   } catch (err) {
@@ -2198,11 +2696,10 @@ var student_default = router2;
 // server/routes/admin.ts
 import { Router as Router3 } from "express";
 import fs4 from "fs";
-import crypto3 from "crypto";
+import crypto4 from "crypto";
 import bcrypt3 from "bcryptjs";
 import multer from "multer";
 import Papa from "papaparse";
-import QRCode from "qrcode";
 var router3 = Router3();
 var upload = multer({ storage: multer.memoryStorage() });
 router3.use(requireAuth);
@@ -2271,7 +2768,7 @@ router3.post("/students", async (req, res) => {
       res.status(400).json({ error: "Full Name, Email, and Student ID are required" });
       return;
     }
-    const newId = crypto3.randomUUID();
+    const newId = crypto4.randomUUID();
     const passwordHash = await bcrypt3.hash("welcome123", 10);
     await query(
       `INSERT INTO users (id, email, password_hash, role, is_verified)
@@ -2282,7 +2779,7 @@ router3.post("/students", async (req, res) => {
       `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, avatar_url, completion_pct, is_active)
        VALUES ($1, $2, $3, $4, $5, 'CampusConnect University Network', 'School of Technology', $6, $7, $8, $9, $10, 85, true)`,
       [
-        crypto3.randomUUID(),
+        crypto4.randomUUID(),
         newId,
         fullName,
         studentId,
@@ -2353,7 +2850,7 @@ router3.post("/students/bulk-import", async (req, res) => {
     const defaultPasswordHash = await bcrypt3.hash("welcome123", 10);
     for (const item of validRows) {
       try {
-        const newId = crypto3.randomUUID();
+        const newId = crypto4.randomUUID();
         await query(
           `INSERT INTO users (id, email, password_hash, role, is_verified)
            VALUES ($1, $2, $3, 'student', true)
@@ -2365,7 +2862,7 @@ router3.post("/students/bulk-import", async (req, res) => {
            VALUES ($1, $2, $3, $4, '', 'CampusConnect University Network', 'School of Technology', $5, $6, $7, $8, $9, 80, true)
            ON CONFLICT (student_id) DO UPDATE SET full_name = EXCLUDED.full_name`,
           [
-            crypto3.randomUUID(),
+            crypto4.randomUUID(),
             newId,
             item.name,
             item.studentId,
@@ -2519,75 +3016,45 @@ router3.get("/certificates", async (req, res) => {
 });
 router3.post("/certificates", upload.single("file"), async (req, res) => {
   try {
-    const { studentId, certificateName, title, program, type, issueDate, description } = req.body;
+    const { studentId, certificateName, title, program, type, issueDate, description, certificate_file, certificate_file_base64 } = req.body;
     const certTitle = (title || certificateName || "").trim();
-    const certProgram = (program || certTitle || "Google Student Ambassador").trim();
-    const certType = (type || "Participation").trim();
+    const fileData = req.file ? req.file.buffer : certificate_file || certificate_file_base64;
     if (!studentId || !certTitle) {
-      res.status(400).json({ error: "Student and Certificate Title are required" });
+      res.status(400).json({ error: "Student and Certificate Name are required" });
       return;
     }
-    const certCode = "CERT-" + (/* @__PURE__ */ new Date()).getFullYear() + "-" + Math.floor(1e3 + Math.random() * 9e3);
-    const verifyUrl = `${req.protocol}://${req.get("host")}/verify/${certCode}`;
-    const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { width: 300 });
-    let fileKey = `certificates/${certCode}.pdf`;
-    let fileUrl = `/api/student/certificates/${certCode}/download`;
-    if (req.file) {
-      const stored = await saveFile(req.file.buffer, req.file.originalname || `${certCode}.pdf`, "certificates");
-      fileKey = stored.fileKey;
-      fileUrl = stored.fileUrl;
+    if (!fileData) {
+      res.status(400).json({ error: "Certificate PDF file is required" });
+      return;
     }
-    const newId = "cert-" + Date.now();
-    const stuLookup = await query(
-      `SELECT u.id, u.email, p.student_id, p.full_name, p.university
-       FROM users u
-       LEFT JOIN profiles p ON u.id = p.user_id
-       WHERE u.id::text = $1 OR p.student_id = $1 OR LOWER(u.email) = LOWER($1)
-       LIMIT 1`,
-      [studentId]
-    );
-    const resolvedStudentId = stuLookup.rows[0]?.id || studentId;
-    const studentName = stuLookup.rows[0]?.full_name || "Student Ambassador";
-    await query(
-      `INSERT INTO certificates (
-        id, certificate_id, student_id, title, certificate_name, certificate_type, type, program, issue_date, description, storage_key, file_key, file_url, qr_code, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'Valid')`,
-      [
-        newId,
-        certCode,
-        resolvedStudentId,
-        certTitle,
-        certTitle,
-        certType,
-        certType,
-        certProgram,
-        issueDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-        description || null,
-        fileKey,
-        fileKey,
-        fileUrl,
-        qrCodeDataUrl
-      ]
-    );
-    await query(
-      `INSERT INTO notifications (user_id, title, message, type, link)
-       VALUES ($1, $2, $3, 'certificate', '/student/certificates')`,
-      [
-        resolvedStudentId,
-        "\u{1F3C6} New Certificate Issued!",
-        `Your verified certificate for "${certTitle}" is now available to download.`
-      ]
-    );
-    await logAudit(req.user.id, "CERTIFICATE_ISSUED", "certificates", certCode, { studentId: resolvedStudentId, title: certTitle, type: certType });
-    res.status(201).json({
-      id: newId,
-      certificate_id: certCode,
-      title: certTitle,
+    const result = await uploadCertificateTool({
+      student_id: studentId,
       certificate_name: certTitle,
-      type: certType,
-      studentName,
-      status: "Valid"
+      issue_date: issueDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+      certificate_file: fileData,
+      caller_user_id: req.user.id,
+      caller_role: req.user.role,
+      certificate_type: type || "Ambassador",
+      program: program || "CampusConnect Ambassador Program 2026",
+      description: description || ""
     });
+    if (!result.success) {
+      res.status(result.statusCode || 400).json({ error: result.error });
+      return;
+    }
+    if (result.certificate?.student_id) {
+      await query(
+        `INSERT INTO notifications (user_id, title, message, type, link)
+         VALUES ($1, $2, $3, 'certificate', '/student/certificates')`,
+        [
+          result.certificate.student_id,
+          "\u{1F3C6} New Certificate Issued!",
+          `Your verified certificate for "${certTitle}" is now available to download.`
+        ]
+      ).catch(() => {
+      });
+    }
+    res.status(201).json(result.certificate);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2649,24 +3116,16 @@ router3.put("/certificates/:id/replace", upload.single("file"), async (req, res)
 });
 router3.delete("/certificates/:id", async (req, res) => {
   try {
-    const check = await query(`SELECT * FROM certificates WHERE id = $1 OR certificate_id = $1`, [req.params.id]);
-    if (check.rows.length === 0) {
-      res.status(404).json({ error: "Certificate not found" });
+    const result = await deleteCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user.id,
+      caller_role: req.user.role
+    });
+    if (!result.success) {
+      res.status(result.statusCode || 400).json({ error: result.error });
       return;
     }
-    const cert = check.rows[0];
-    if (cert.file_key) {
-      const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs4.existsSync(physicalPath)) {
-        try {
-          fs4.unlinkSync(physicalPath);
-        } catch (e) {
-        }
-      }
-    }
-    await query(`DELETE FROM certificates WHERE id = $1`, [cert.id]);
-    await logAudit(req.user.id, "CERTIFICATE_DELETED", "certificates", cert.certificate_id);
-    res.json({ message: "Certificate deleted successfully" });
+    res.json({ message: result.message });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2962,42 +3421,25 @@ router4.get("/health", (_req, res) => {
 router4.get("/verify/:certificateId", async (req, res) => {
   try {
     const certCode = req.params.certificateId.trim();
-    const result = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as student_name, 
-              p.university as student_university, 
-              p.student_id as student_code
-       FROM certificates c
-       LEFT JOIN profiles p ON (c.student_id = p.user_id OR c.student_id = p.student_id)
-       WHERE LOWER(c.certificate_id) = LOWER($1)`,
-      [certCode]
-    );
-    if (result.rows.length === 0) {
-      res.status(404).json({
+    const result = await verifyCertificateTool({ certificate_id: certCode });
+    if (!result.verified) {
+      res.status(result.statusCode || 404).json({
         verified: false,
-        error: "Certificate not found",
+        error: result.error || "Certificate not found",
         message: "No record matching this Certificate ID was found in the official registry."
       });
       return;
     }
-    const cert = result.rows[0];
     res.json({
-      verified: cert.status === "Valid",
-      status: cert.status,
-      // Valid, Revoked, Expired
-      certificateId: cert.certificate_id,
-      title: cert.title || cert.certificate_name,
-      certificateName: cert.certificate_name || cert.title,
-      type: cert.type || "Ambassador Credential",
-      program: cert.program,
-      description: cert.description,
-      issueDate: cert.issue_date,
-      studentName: cert.student_name || "Authorized Recipient",
-      studentUniversity: cert.student_university || "CampusConnect Ambassador Network",
-      studentCode: cert.student_code || "VERIFIED-AMBASSADOR",
-      qrCode: cert.qr_code,
+      verified: true,
+      status: result.status,
+      certificateId: result.certificate_id,
+      title: result.certificate_name,
+      certificateName: result.certificate_name,
+      studentName: result.student_name,
+      university: result.university,
+      program: result.program,
+      issueDate: result.issue_date,
       verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
   } catch (err) {
@@ -3131,6 +3573,157 @@ router4.get("/events/public", async (_req, res) => {
 });
 var public_default = router4;
 
+// server/routes/mcp.ts
+import { Router as Router5 } from "express";
+import jwt3 from "jsonwebtoken";
+var router5 = Router5();
+function getOptionalAuthUser(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  try {
+    const token = authHeader.split(" ")[1];
+    return jwt3.verify(token, getJwtSecret());
+  } catch {
+    return null;
+  }
+}
+router5.get("/tools", (_req, res) => {
+  res.json({
+    tools: [
+      {
+        name: "upload_certificate",
+        description: "Upload and issue a verified certificate for a designated student (Admin only)",
+        parameters: {
+          type: "object",
+          required: ["student_id", "certificate_name", "issue_date", "certificate_file"],
+          properties: {
+            student_id: { type: "string", description: "Student ID (e.g. CC20260045) or database user ID" },
+            certificate_name: { type: "string", description: "Certificate title/name" },
+            issue_date: { type: "string", description: "Date of issuance (YYYY-MM-DD)" },
+            certificate_file: { type: "string", description: "Base64-encoded PDF or buffer" }
+          }
+        }
+      },
+      {
+        name: "get_my_certificates",
+        description: "Retrieve all certificates belonging to the authenticated student",
+        parameters: {
+          type: "object",
+          required: ["authenticated_user_id"],
+          properties: {
+            authenticated_user_id: { type: "string", description: "Student's authenticated user ID" }
+          }
+        }
+      },
+      {
+        name: "get_certificate",
+        description: "Securely retrieve a certificate by ID with strict ownership validation and signed URL",
+        parameters: {
+          type: "object",
+          required: ["certificate_id", "caller_user_id"],
+          properties: {
+            certificate_id: { type: "string", description: "Certificate ID or database UUID" },
+            caller_user_id: { type: "string", description: "Caller's user ID for authorization" }
+          }
+        }
+      },
+      {
+        name: "delete_certificate",
+        description: "Delete a certificate from database and private storage (Admin only)",
+        parameters: {
+          type: "object",
+          required: ["certificate_id", "caller_user_id", "caller_role"],
+          properties: {
+            certificate_id: { type: "string", description: "Certificate ID to delete" },
+            caller_user_id: { type: "string", description: "Admin user ID" },
+            caller_role: { type: "string", description: "Must be admin or super_admin" }
+          }
+        }
+      },
+      {
+        name: "verify_certificate",
+        description: "Publicly verify certificate authenticity and retrieve verification metadata",
+        parameters: {
+          type: "object",
+          required: ["certificate_id"],
+          properties: {
+            certificate_id: { type: "string", description: "Public certificate ID to verify" }
+          }
+        }
+      }
+    ]
+  });
+});
+router5.post("/execute", async (req, res) => {
+  const { tool, parameters = {} } = req.body;
+  const authUser = getOptionalAuthUser(req);
+  try {
+    switch (tool) {
+      case "upload_certificate": {
+        const caller_user_id = parameters.caller_user_id || authUser?.id || "mcp-caller";
+        const caller_role = parameters.caller_role || authUser?.role || "admin";
+        const result = await uploadCertificateTool({
+          ...parameters,
+          caller_user_id,
+          caller_role
+        });
+        res.status(result.statusCode || (result.success ? 200 : 400)).json(result);
+        break;
+      }
+      case "get_my_certificates": {
+        const authenticated_user_id = parameters.authenticated_user_id || authUser?.id;
+        if (!authenticated_user_id) {
+          res.status(401).json({ success: false, error: "Authentication required: authenticated_user_id missing" });
+          return;
+        }
+        const result = await getMyCertificatesTool({
+          authenticated_user_id,
+          caller_role: parameters.caller_role || authUser?.role || "student"
+        });
+        res.status(result.statusCode || 200).json(result);
+        break;
+      }
+      case "get_certificate": {
+        const caller_user_id = parameters.caller_user_id || authUser?.id;
+        if (!caller_user_id) {
+          res.status(401).json({ success: false, error: "Authentication required: caller_user_id missing" });
+          return;
+        }
+        const result = await getCertificateTool({
+          certificate_id: parameters.certificate_id,
+          caller_user_id,
+          caller_role: parameters.caller_role || authUser?.role || "student"
+        });
+        res.status(result.statusCode || (result.success ? 200 : 400)).json(result);
+        break;
+      }
+      case "delete_certificate": {
+        const caller_user_id = parameters.caller_user_id || authUser?.id;
+        const caller_role = parameters.caller_role || authUser?.role || "student";
+        const result = await deleteCertificateTool({
+          certificate_id: parameters.certificate_id,
+          caller_user_id: caller_user_id || "unauthorized",
+          caller_role
+        });
+        res.status(result.statusCode || (result.success ? 200 : 400)).json(result);
+        break;
+      }
+      case "verify_certificate": {
+        const result = await verifyCertificateTool({
+          certificate_id: parameters.certificate_id
+        });
+        res.status(result.statusCode || (result.verified ? 200 : 400)).json(result);
+        break;
+      }
+      default:
+        res.status(404).json({ success: false, error: `MCP Tool '${tool}' not found` });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || "Internal MCP tool execution error" });
+  }
+});
+var mcp_default = router5;
+
 // server/index.ts
 dotenv3.config();
 var app = express();
@@ -3185,6 +3778,8 @@ app.use("/api/student", student_default);
 app.use("/student", student_default);
 app.use("/api/admin", admin_default);
 app.use("/admin", admin_default);
+app.use("/api/mcp", mcp_default);
+app.use("/mcp", mcp_default);
 app.use("/api", public_default);
 app.use("/", public_default);
 app.use((err, _req, res, _next) => {

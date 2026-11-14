@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently -n \"API,VITE\" -c \"magenta,cyan\" \"tsx server/index.ts\" \"vite\"",
     "server": "tsx server/index.ts",
+    "mcp": "tsx server/mcp/server.ts",
     "client": "vite",
     "build": "tsc && vite build && node scripts/build-api.js",
     "build:api": "node scripts/build-api.js",
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.6",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@neondatabase/serverless": "^1.2.0",
     "@radix-ui/react-accordion": "^1.3.1",
     "@radix-ui/react-alert-dialog": "^1.2.1",

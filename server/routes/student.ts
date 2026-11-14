@@ -5,6 +5,7 @@ import { requireAuth, requireRole, AuthRequest } from '../middleware/auth'
 import { query } from '../db'
 import { getFilePath, generateSignedDownloadUrl } from '../storage'
 import { generateCertificatePdfBuffer } from '../storage/pdfGenerator'
+import { getMyCertificatesTool, getCertificateTool } from '../mcp/certificateTools'
 
 const router = Router()
 
@@ -98,91 +99,58 @@ router.get('/interviews/:id', async (req: AuthRequest, res: Response): Promise<v
   }
 })
 
-// GET /api/student/certificates
+// GET /api/student/certificates (Fetch authenticated student's own certificates via MCP)
 router.get('/certificates', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const studentId = req.user!.id
-    const resSql = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as "studentName", 
-              u.email as "studentEmail", 
-              p.student_id as "studentCode",
-              p.university as "studentUniversity"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.student_id = $1 
-          OR c.student_id IN (SELECT student_id FROM profiles WHERE user_id = $1)
-          OR c.student_id IN (SELECT email FROM users WHERE id = $1)
-       ORDER BY c.issue_date DESC, c.created_at DESC`,
-      [studentId]
-    )
-    res.json(resSql.rows)
+    const result = await getMyCertificatesTool({
+      authenticated_user_id: req.user!.id,
+      caller_role: req.user!.role
+    })
+
+    if (!result.success) {
+      res.status(result.statusCode || 400).json({ error: result.error })
+      return
+    }
+
+    res.json(result.certificates)
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
 })
 
-// GET /api/student/certificates/:id/view (Secure view verifying ownership)
+// GET /api/student/certificates/:id/view (Secure view verifying ownership via MCP)
 router.get('/certificates/:id/view', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const studentId = req.user!.id
-    const isPrivileged = req.user!.role === 'admin' || req.user!.role === 'super_admin'
+    const result = await getCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user!.id,
+      caller_role: req.user!.role
+    })
 
-    const resSql = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as "studentName", 
-              u.email as "studentEmail", 
-              p.student_id as "studentCode",
-              p.university as "studentUniversity"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
-      [req.params.id]
-    )
-
-    if (resSql.rows.length === 0) {
-      res.status(404).json({ error: 'Certificate not found' })
+    if (!result.success) {
+      res.status(result.statusCode || 403).json({ error: result.error })
       return
     }
 
-    const cert = resSql.rows[0]
-
-    // Verify ownership
-    const ownsCert =
-      cert.student_id === studentId ||
-      cert.studentCode === req.user!.studentId ||
-      cert.studentEmail?.toLowerCase() === req.user!.email.toLowerCase()
-
-    if (!isPrivileged && !ownsCert) {
-      res.status(403).json({ error: 'Forbidden: You cannot access another student certificate' })
-      return
-    }
-
+    const cert = result.certificate!
     const filename = `${cert.certificate_id}.pdf`
-    if (cert.file_key) {
-      const physicalPath = getFilePath(cert.file_key)
-      if (physicalPath && fs.existsSync(physicalPath)) {
-        res.setHeader('Content-Type', 'application/pdf')
-        res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
-        fs.createReadStream(physicalPath).pipe(res)
-        return
-      }
+
+    if (cert.file_path && fs.existsSync(cert.file_path)) {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+      fs.createReadStream(cert.file_path).pipe(res)
+      return
     }
 
+    // Fallback: generate PDF if not cached on disk
     const pdfBuffer = generateCertificatePdfBuffer({
-      studentName: cert.studentName,
-      title: cert.title || cert.certificate_name,
-      type: cert.type,
+      studentName: cert.student_name,
+      title: cert.certificate_name || cert.title,
+      type: cert.type || 'Ambassador',
       certificate_id: cert.certificate_id,
-      program: cert.program,
+      program: cert.program || 'CampusConnect Ambassador Program',
       issue_date: cert.issue_date,
-      studentUniversity: cert.studentUniversity
+      studentUniversity: 'Delhi Technological University'
     })
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
@@ -192,67 +160,40 @@ router.get('/certificates/:id/view', async (req: AuthRequest, res: Response): Pr
   }
 })
 
-// GET /api/student/certificates/:id/download (Secure download verifying ownership)
+// GET /api/student/certificates/:id/download (Secure download verifying ownership via MCP)
 router.get('/certificates/:id/download', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const studentId = req.user!.id
-    const isPrivileged = req.user!.role === 'admin' || req.user!.role === 'super_admin'
+    const result = await getCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user!.id,
+      caller_role: req.user!.role
+    })
 
-    const resSql = await query(
-      `SELECT c.*, 
-              COALESCE(c.title, c.certificate_name) as title,
-              COALESCE(c.type, 'Participation') as type,
-              p.full_name as "studentName", 
-              u.email as "studentEmail", 
-              p.student_id as "studentCode",
-              p.university as "studentUniversity"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
-      [req.params.id]
-    )
-
-    if (resSql.rows.length === 0) {
-      res.status(404).json({ error: 'Certificate not found' })
+    if (!result.success) {
+      res.status(result.statusCode || 403).json({ error: result.error })
       return
     }
 
-    const cert = resSql.rows[0]
-
-    // Verify ownership
-    const ownsCert =
-      cert.student_id === studentId ||
-      cert.studentCode === req.user!.studentId ||
-      cert.studentEmail?.toLowerCase() === req.user!.email.toLowerCase()
-
-    if (!isPrivileged && !ownsCert) {
-      res.status(403).json({ error: 'Forbidden: You cannot access another student certificate' })
-      return
-    }
-
-    const studentNameClean = (cert.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '_')
-    const titleClean = (cert.title || cert.certificate_name || 'Certificate').replace(/[^a-zA-Z0-9]/g, '_')
+    const cert = result.certificate!
+    const studentNameClean = (cert.student_name || 'Student').replace(/[^a-zA-Z0-9]/g, '_')
+    const titleClean = (cert.certificate_name || 'Certificate').replace(/[^a-zA-Z0-9]/g, '_')
     const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`
 
-    if (cert.file_key) {
-      const physicalPath = getFilePath(cert.file_key)
-      if (physicalPath && fs.existsSync(physicalPath)) {
-        res.setHeader('Content-Type', 'application/pdf')
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-        fs.createReadStream(physicalPath).pipe(res)
-        return
-      }
+    if (cert.file_path && fs.existsSync(cert.file_path)) {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      fs.createReadStream(cert.file_path).pipe(res)
+      return
     }
 
     const pdfBuffer = generateCertificatePdfBuffer({
-      studentName: cert.studentName,
-      title: cert.title || cert.certificate_name,
-      type: cert.type,
+      studentName: cert.student_name,
+      title: cert.certificate_name || cert.title,
+      type: cert.type || 'Ambassador',
       certificate_id: cert.certificate_id,
-      program: cert.program,
+      program: cert.program || 'CampusConnect Ambassador Program',
       issue_date: cert.issue_date,
-      studentUniversity: cert.studentUniversity
+      studentUniversity: 'Delhi Technological University'
     })
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
@@ -262,43 +203,23 @@ router.get('/certificates/:id/download', async (req: AuthRequest, res: Response)
   }
 })
 
-// GET /api/student/certificates/:id/signed-url (Temporary signed URL)
+// GET /api/student/certificates/:id/signed-url (Temporary signed URL via MCP)
 router.get('/certificates/:id/signed-url', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const studentId = req.user!.id
-    const isPrivileged = req.user!.role === 'admin' || req.user!.role === 'super_admin'
+    const result = await getCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user!.id,
+      caller_role: req.user!.role
+    })
 
-    const resSql = await query(
-      `SELECT c.*, p.full_name as "studentName", u.email as "studentEmail", p.student_id as "studentCode"
-       FROM certificates c
-       LEFT JOIN users u ON (c.student_id = u.id::text OR LOWER(c.student_id) = LOWER(u.email))
-       LEFT JOIN profiles p ON (u.id = p.user_id OR c.student_id = p.student_id)
-       WHERE c.id = $1 OR LOWER(c.certificate_id) = LOWER($1)`,
-      [req.params.id]
-    )
-
-    if (resSql.rows.length === 0) {
-      res.status(404).json({ error: 'Certificate not found' })
+    if (!result.success) {
+      res.status(result.statusCode || 403).json({ error: result.error })
       return
     }
-
-    const cert = resSql.rows[0]
-    const ownsCert =
-      cert.student_id === studentId ||
-      cert.studentCode === req.user!.studentId ||
-      cert.studentEmail?.toLowerCase() === req.user!.email.toLowerCase()
-
-    if (!isPrivileged && !ownsCert) {
-      res.status(403).json({ error: 'Forbidden: You cannot access another student certificate' })
-      return
-    }
-
-    const fileKey = cert.file_key || `certificates/${cert.certificate_id}.pdf`
-    const signedUrl = generateSignedDownloadUrl(fileKey, studentId)
 
     res.json({
-      signedUrl,
-      certificateId: cert.certificate_id,
+      signedUrl: result.certificate!.signed_url,
+      certificateId: result.certificate!.certificate_id,
       expiresIn: 3600
     })
   } catch (err: any) {

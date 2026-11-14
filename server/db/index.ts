@@ -58,6 +58,22 @@ class FallbackStore {
         role: 'super_admin',
         is_verified: true,
         created_at: new Date()
+      },
+      {
+        id: 'u-rahul-cc20260045',
+        email: 'rahul@campusconnect.edu',
+        password_hash: '$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C', // student123
+        role: 'student',
+        is_verified: true,
+        created_at: new Date()
+      },
+      {
+        id: 'u-amit-cc20260046',
+        email: 'amit@campusconnect.edu',
+        password_hash: '$2b$10$rZpW106cwM6ULC/CDHtXKOsdN/9ZXI8xQRAXbYBya/oQdbG23876C', // student123
+        role: 'student',
+        is_verified: true,
+        created_at: new Date()
       }
     ],
     profiles: [
@@ -77,6 +93,42 @@ class FallbackStore {
         bio: 'Campus Ambassador Lead & Executive Director',
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA',
         completion_pct: 100,
+        is_active: true
+      },
+      {
+        id: 'prof-rahul',
+        user_id: 'u-rahul-cc20260045',
+        full_name: 'Rahul Sharma',
+        student_id: 'CC20260045',
+        phone: '+91 9876543211',
+        university: 'Delhi Technological University',
+        college: 'School of Engineering',
+        course: 'B.Tech',
+        branch: 'Computer Science',
+        year: 3,
+        semester: 5,
+        skills: ['Python', 'Cloud Computing', 'Web Development'],
+        bio: 'Google Student Ambassador Candidate & Tech Fellow',
+        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Rahul+Sharma',
+        completion_pct: 90,
+        is_active: true
+      },
+      {
+        id: 'prof-amit',
+        user_id: 'u-amit-cc20260046',
+        full_name: 'Amit Kumar',
+        student_id: 'CC20260046',
+        phone: '+91 9876543212',
+        university: 'Delhi Technological University',
+        college: 'School of Engineering',
+        course: 'B.Tech',
+        branch: 'Information Technology',
+        year: 3,
+        semester: 5,
+        skills: ['Fullstack', 'Cybersecurity', 'DevOps'],
+        bio: 'Campus Ambassador & IT Scholar',
+        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar',
+        completion_pct: 90,
         is_active: true
       }
     ],
@@ -271,6 +323,7 @@ class FallbackStore {
           certificate_type: c.certificate_type || c.type || 'Ambassador',
           file_key: c.file_key || c.storage_key,
           storage_key: c.storage_key || c.file_key,
+          file_path: c.file_path || c.file_key || c.storage_key,
           studentName: prof.full_name || 'Student Recipient',
           studentEmail: stu.email || '',
           studentCode: prof.student_id || 'GSA-2026-001',
@@ -365,6 +418,7 @@ class FallbackStore {
         description: description || '',
         storage_key: resolvedKey,
         file_key: resolvedKey,
+        file_path: resolvedKey,
         file_url: file_url || `/api/student/certificates/${certificate_id}/download`,
         qr_code,
         status: 'Valid',
@@ -376,7 +430,57 @@ class FallbackStore {
       return { rows: [newCert], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
 
-    // 11. Generic SELECT
+    // 11. DELETE FROM certificates
+    if (lower.startsWith('delete from certificates')) {
+      const idParam = params[0] ? String(params[0]).trim().toLowerCase() : null
+      if (idParam) {
+        this.data.certificates = this.data.certificates.filter(c =>
+          String(c.id).toLowerCase() !== idParam &&
+          String(c.certificate_id).toLowerCase() !== idParam
+        )
+      }
+      this.save()
+      return { rows: [], command: 'DELETE', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    // 12. UPDATE certificates
+    if (lower.startsWith('update certificates')) {
+      const idParam = params[params.length - 1] ? String(params[params.length - 1]).trim().toLowerCase() : null
+      for (const c of this.data.certificates) {
+        if (String(c.id).toLowerCase() === idParam || String(c.certificate_id).toLowerCase() === idParam) {
+          if (lower.includes("status = 'revoked'")) {
+            c.status = 'Revoked'
+          } else if (lower.includes('status =')) {
+            const m = text.match(/status\s*=\s*'([^']+)'/i)
+            if (m) c.status = m[1]
+          }
+          if (lower.includes('title =') && params[0]) c.title = params[0]
+          c.updated_at = new Date()
+        }
+      }
+      this.save()
+      return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    // 13. INSERT INTO audit_logs
+    if (lower.startsWith('insert into audit_logs')) {
+      const [user_id, action, resource, resource_id, metadata, ip_address] = params
+      const newLog = {
+        id: 'log-' + Date.now(),
+        user_id,
+        action,
+        resource,
+        resource_id,
+        metadata: typeof metadata === 'string' ? JSON.parse(metadata) : metadata,
+        ip_address,
+        created_at: new Date()
+      }
+      this.data.audit_logs.push(newLog)
+      this.save()
+      return { rows: [newLog], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    // 14. Generic SELECT
     for (const table of Object.keys(this.data)) {
       if (lower.startsWith(`select * from ${table}`) || lower.includes(`from ${table}`)) {
         let rows = [...this.data[table]]
@@ -418,6 +522,8 @@ export async function runMigration() {
     await pool.query(`
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
     `).catch(() => {})
     console.log('[Migration] Schema migration completed successfully.')
   } catch (err: any) {

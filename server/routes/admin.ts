@@ -9,6 +9,7 @@ import { requireAuth, requireRole, AuthRequest, logAudit } from '../middleware/a
 import { query } from '../db'
 import { saveFile, getFilePath } from '../storage'
 import { generateCertificatePdfBuffer } from '../storage/pdfGenerator'
+import { uploadCertificateTool, deleteCertificateTool } from '../mcp/certificateTools'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage() })
@@ -376,90 +377,55 @@ router.get('/certificates', async (req: AuthRequest, res: Response): Promise<voi
   }
 })
 
-// POST /api/admin/certificates (Upload PDF, store metadata & link to unique student ID)
+// POST /api/admin/certificates (Upload PDF, store metadata & link to unique student ID via MCP)
 router.post('/certificates', upload.single('file'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { studentId, certificateName, title, program, type, issueDate, description } = req.body
+    const { studentId, certificateName, title, program, type, issueDate, description, certificate_file, certificate_file_base64 } = req.body
     const certTitle = (title || certificateName || '').trim()
-    const certProgram = (program || certTitle || 'Google Student Ambassador').trim()
-    const certType = (type || 'Participation').trim()
+    const fileData = req.file ? req.file.buffer : (certificate_file || certificate_file_base64)
 
     if (!studentId || !certTitle) {
-      res.status(400).json({ error: 'Student and Certificate Title are required' })
+      res.status(400).json({ error: 'Student and Certificate Name are required' })
       return
     }
 
-    const certCode = 'CERT-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000)
-    const verifyUrl = `${req.protocol}://${req.get('host')}/verify/${certCode}`
-    const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { width: 300 })
-
-    let fileKey = `certificates/${certCode}.pdf`
-    let fileUrl = `/api/student/certificates/${certCode}/download`
-
-    if (req.file) {
-      const stored = await saveFile(req.file.buffer, req.file.originalname || `${certCode}.pdf`, 'certificates')
-      fileKey = stored.fileKey
-      fileUrl = stored.fileUrl
+    if (!fileData) {
+      res.status(400).json({ error: 'Certificate PDF file is required' })
+      return
     }
 
-    const newId = 'cert-' + Date.now()
-
-    // Resolve student user ID from UUID, student_id code, or email
-    const stuLookup = await query(
-      `SELECT u.id, u.email, p.student_id, p.full_name, p.university
-       FROM users u
-       LEFT JOIN profiles p ON u.id = p.user_id
-       WHERE u.id::text = $1 OR p.student_id = $1 OR LOWER(u.email) = LOWER($1)
-       LIMIT 1`,
-      [studentId]
-    )
-    const resolvedStudentId = stuLookup.rows[0]?.id || studentId
-    const studentName = stuLookup.rows[0]?.full_name || 'Student Ambassador'
-
-    await query(
-      `INSERT INTO certificates (
-        id, certificate_id, student_id, title, certificate_name, certificate_type, type, program, issue_date, description, storage_key, file_key, file_url, qr_code, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'Valid')`,
-      [
-        newId,
-        certCode,
-        resolvedStudentId,
-        certTitle,
-        certTitle,
-        certType,
-        certType,
-        certProgram,
-        issueDate || new Date().toISOString().split('T')[0],
-        description || null,
-        fileKey,
-        fileKey,
-        fileUrl,
-        qrCodeDataUrl
-      ]
-    )
-
-    // Notify student
-    await query(
-      `INSERT INTO notifications (user_id, title, message, type, link)
-       VALUES ($1, $2, $3, 'certificate', '/student/certificates')`,
-      [
-        resolvedStudentId,
-        '🏆 New Certificate Issued!',
-        `Your verified certificate for "${certTitle}" is now available to download.`
-      ]
-    )
-
-    await logAudit(req.user!.id, 'CERTIFICATE_ISSUED', 'certificates', certCode, { studentId: resolvedStudentId, title: certTitle, type: certType })
-
-    res.status(201).json({
-      id: newId,
-      certificate_id: certCode,
-      title: certTitle,
+    // Delegate to MCP tool
+    const result = await uploadCertificateTool({
+      student_id: studentId,
       certificate_name: certTitle,
-      type: certType,
-      studentName,
-      status: 'Valid'
+      issue_date: issueDate || new Date().toISOString().split('T')[0],
+      certificate_file: fileData,
+      caller_user_id: req.user!.id,
+      caller_role: req.user!.role,
+      certificate_type: type || 'Ambassador',
+      program: program || 'CampusConnect Ambassador Program 2026',
+      description: description || ''
     })
+
+    if (!result.success) {
+      res.status(result.statusCode || 400).json({ error: result.error })
+      return
+    }
+
+    // Notify student account
+    if (result.certificate?.student_id) {
+      await query(
+        `INSERT INTO notifications (user_id, title, message, type, link)
+         VALUES ($1, $2, $3, 'certificate', '/student/certificates')`,
+        [
+          result.certificate.student_id,
+          '🏆 New Certificate Issued!',
+          `Your verified certificate for "${certTitle}" is now available to download.`
+        ]
+      ).catch(() => {})
+    }
+
+    res.status(201).json(result.certificate)
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
@@ -531,26 +497,21 @@ router.put('/certificates/:id/replace', upload.single('file'), async (req: AuthR
   }
 })
 
-// DELETE /api/admin/certificates/:id (Delete certificate record and file)
+// DELETE /api/admin/certificates/:id (Delete certificate record and file via MCP)
 router.delete('/certificates/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const check = await query(`SELECT * FROM certificates WHERE id = $1 OR certificate_id = $1`, [req.params.id])
-    if (check.rows.length === 0) {
-      res.status(404).json({ error: 'Certificate not found' })
+    const result = await deleteCertificateTool({
+      certificate_id: req.params.id,
+      caller_user_id: req.user!.id,
+      caller_role: req.user!.role
+    })
+
+    if (!result.success) {
+      res.status(result.statusCode || 400).json({ error: result.error })
       return
     }
 
-    const cert = check.rows[0]
-    if (cert.file_key) {
-      const physicalPath = getFilePath(cert.file_key)
-      if (physicalPath && fs.existsSync(physicalPath)) {
-        try { fs.unlinkSync(physicalPath) } catch (e) { /* ignore */ }
-      }
-    }
-
-    await query(`DELETE FROM certificates WHERE id = $1`, [cert.id])
-    await logAudit(req.user!.id, 'CERTIFICATE_DELETED', 'certificates', cert.certificate_id)
-    res.json({ message: 'Certificate deleted successfully' })
+    res.json({ message: result.message })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

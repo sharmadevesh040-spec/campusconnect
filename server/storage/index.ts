@@ -29,6 +29,54 @@ export interface StoredFile {
 }
 
 /**
+ * Saves a certificate PDF buffer to private storage in the structured format:
+ * certificates/{student_id}/{certificate_id}.pdf
+ */
+export async function saveCertificateFile(
+  buffer: Buffer,
+  studentId: string,
+  certificateId: string
+): Promise<{ fileKey: string; filePath: string; size: number }> {
+  // Sanitize studentId and certificateId for safe filesystem path
+  const safeStudentId = String(studentId).replace(/[^a-zA-Z0-9_-]/g, '_')
+  const safeCertId = String(certificateId).replace(/[^a-zA-Z0-9_-]/g, '_')
+  const fileKey = `certificates/${safeStudentId}/${safeCertId}.pdf`
+  const targetPath = path.join(UPLOAD_DIR, fileKey)
+
+  // Ensure student private folder exists
+  const targetDir = path.dirname(targetPath)
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true })
+  }
+
+  fs.writeFileSync(targetPath, buffer)
+
+  return {
+    fileKey,
+    filePath: targetPath,
+    size: buffer.length
+  }
+}
+
+/**
+ * Safely deletes a certificate file from private storage
+ */
+export function deleteCertificateFile(fileKeyOrPath: string): boolean {
+  try {
+    const fullPath = fileKeyOrPath.startsWith(UPLOAD_DIR)
+      ? fileKeyOrPath
+      : path.join(UPLOAD_DIR, fileKeyOrPath)
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath)
+      return true
+    }
+  } catch (err) {
+    console.warn('[Storage] Failed to delete certificate file:', err)
+  }
+  return false
+}
+
+/**
  * Saves a binary file buffer to storage and returns file key & access URL
  */
 export async function saveFile(

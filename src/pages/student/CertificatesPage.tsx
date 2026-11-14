@@ -97,8 +97,8 @@ export default function CertificatesPage() {
       ) : certificates.length === 0 ? (
         <EmptyState
           emoji="🏆"
-          title="No certificates yet"
-          description="Your verified certificates will appear here once issued by your student program administrator."
+          title="You don't have any certificates yet"
+          description="Your verified certificates will automatically appear here once issued by your program administrator."
         />
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
