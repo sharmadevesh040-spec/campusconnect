@@ -472,7 +472,7 @@ export default function AdminCertificatesPage() {
       </div>
 
       {/* ── 1. UPLOAD CERTIFICATE MODAL ── */}
-      <Modal isOpen={isIssueModalOpen} onClose={() => setIsIssueModalOpen(false)} title="Upload Certificate to Student Account">
+      <Modal isOpen={isIssueModalOpen} onClose={() => setIsIssueModalOpen(false)} title="Upload Certificate to Student Account" size="lg">
         <form onSubmit={handleIssue} className="space-y-4">
           {/* Step 1: Select Student with Search by Name, Student ID, Email */}
           <div className="space-y-2">
@@ -627,8 +627,8 @@ export default function AdminCertificatesPage() {
             />
           </div>
 
-          {/* Upload Button */}
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-white/10">
+          {/* Upload Button - Sticky at bottom */}
+          <div className="sticky bottom-0 bg-white dark:bg-[#0c0d12] pt-3 pb-1 border-t border-slate-100 dark:border-white/10 flex justify-end gap-2 -mx-5 sm:-mx-6 px-5 sm:px-6">
             <Button type="button" variant="tactileDark" size="sm" onClick={() => setIsIssueModalOpen(false)}>
               Cancel
             </Button>
@@ -640,7 +640,7 @@ export default function AdminCertificatesPage() {
       </Modal>
 
       {/* ── 2. EDIT CERTIFICATE METADATA MODAL ── */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Certificate Metadata">
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Certificate Metadata" size="lg">
         <form onSubmit={handleEditSave} className="space-y-4">
           <div>
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Certificate Title</label>
@@ -778,7 +778,7 @@ export default function AdminCertificatesPage() {
 
       {/* ── 5. PDF PREVIEW MODAL ── */}
       {previewBlobUrl && (
-        <Modal isOpen={Boolean(previewBlobUrl)} onClose={() => { URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null); }} title={previewTitle || 'Certificate Preview'}>
+        <Modal isOpen={Boolean(previewBlobUrl)} onClose={() => { URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null); }} title={previewTitle || 'Certificate Preview'} size="xl">
           <div className="space-y-3">
             <div className="w-full h-[500px] border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden bg-slate-900">
               <iframe src={previewBlobUrl} className="w-full h-full" title="PDF Preview" />
