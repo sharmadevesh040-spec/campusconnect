@@ -11,62 +11,30 @@ import { ThemeToggle } from '@/components/common/ThemeToggle'
 
 export default function LandingPage() {
   const { canInstall, install } = usePWAInstall()
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'interviews' | 'credentials' | 'tasks'>('all')
-
   const feedItems = [
     {
-      id: 'round-1',
-      type: 'interviews',
-      tag: 'INTERVIEW · SCHEDULED',
-      ratio: '1.594',
-      title: 'Google Student Ambassador — Technical Strategy Round',
-      by: 'Priya Nair · Campus Program Director',
-      status: 'TODAY 14:30',
-      statusColor: 'text-[#11d04a]',
-      detail: 'Meet link attached · 45 min round · Presentation ready',
-      icon: Mic2
-    },
-    {
       id: 'cert-1',
-      type: 'credentials',
       tag: 'CREDENTIAL · SHA-256',
       ratio: '1.414',
-      title: 'Official Certificate of Academic & Leadership Excellence',
-      by: 'University Senate & Student Affairs',
+      title: 'Google Student Ambassador Certificate',
+      by: 'Official University Ambassador Program',
       status: 'VERIFIED',
-      statusColor: 'text-[#2170f5]',
-      detail: 'GSA-2026-282742 · Tamper-proof vector PDF issued',
+      statusColor: 'text-[#11d04a]',
+      detail: 'GSA-2026-KK670 · Tamper-proof vector PDF issued',
       icon: Award
     },
     {
-      id: 'task-1',
-      type: 'tasks',
-      tag: 'MILESTONE · HIGH PRIORITY',
-      ratio: '1.600',
-      title: 'Submit Fall Semester Ambassador Outreach Telemetry',
-      by: 'Lead Coordinator · Deadline: 18 Nov',
-      status: 'IN PROGRESS',
-      statusColor: 'text-[#f59e0b]',
-      detail: 'IndexedDB background sync active · 4 milestones done',
-      icon: CheckSquare
-    },
-    {
-      id: 'event-1',
-      type: 'interviews',
-      tag: 'CAMPUS FORUM · OPEN',
-      ratio: '1.778',
-      title: 'Autonomous AI Agents & Systems Student Colloquium',
-      by: 'Engineering Hall C · Hybrid Stream',
-      status: '84/100 SEATS',
-      statusColor: 'text-[#11d04a]',
-      detail: 'RSVP confirmed · Calendar .ics invite synchronized',
-      icon: Calendar
+      id: 'cert-2',
+      tag: 'STUDENT IDENTITY · ACTIVE',
+      ratio: '1.586',
+      title: 'Digital Campus Access Badge & Ambassador ID',
+      by: 'Campus Security & Identity Registrar',
+      status: 'AUTHENTICATED',
+      statusColor: 'text-[#2170f5]',
+      detail: 'Hardware simulation reader & cryptographic validation',
+      icon: ShieldCheck
     }
   ]
-
-  const filteredItems = selectedFilter === 'all'
-    ? feedItems
-    : feedItems.filter(i => i.type === selectedFilter)
 
   return (
     <div className="min-h-screen bg-[#090a0d] text-[#e4e4e7] flex flex-col font-sans selection:bg-[#27272a] selection:text-white">
@@ -120,7 +88,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-[15px] leading-[1.58] text-[#8e8e93]">
-              CampusConnect is an offline-first student registry. It measures interview rounds with millisecond countdowns, organizes high-priority milestones, synchronizes verified credentials over SHA-256, and keeps your campus synchronized with zero latency.
+              CampusConnect is an institutional student ambassador registry and credential verification platform. It issues cryptographically verified student certificates, manages digital student identities, and delivers tamper-proof SHA-256 verification.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -178,34 +146,17 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-medium tracking-[-0.02em] text-[#ededed]">
-                Active Campus Registry
+                Verified Credentials & Digital Identity
               </h2>
               <p className="text-[13px] text-[#71717a] mt-0.5">
-                Curated operational pipeline · real-time status across rounds, certificates, and tasks
+                Cryptographically signed institutional certificates and student ID badges
               </p>
-            </div>
-
-            {/* Lookap Filter Pills */}
-            <div className="flex items-center gap-1.5 p-1 bg-[#121216] border border-white/[0.08] rounded-xl font-mono text-[11px]">
-              {(['all', 'interviews', 'credentials', 'tasks'] as const).map(filter => (
-                <button
-                  key={filter}
-                  onClick={() => setSelectedFilter(filter)}
-                  className={`px-3 py-1 rounded-lg transition-all capitalize ${
-                    selectedFilter === filter
-                      ? 'bg-[#222228] text-white font-semibold shadow-sm'
-                      : 'text-[#8e8e93] hover:text-white'
-                  }`}
-                >
-                  {filter}
-                </button>
-              ))}
             </div>
           </div>
 
           {/* 2-Column High-Density Specimen Cards */}
           <div className="grid md:grid-cols-2 gap-4">
-            {filteredItems.map(item => (
+            {feedItems.map(item => (
               <div
                 key={item.id}
                 className="group relative rounded-xl bg-[#121216] border border-white/[0.08] p-5 hover:border-white/20 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.5)] flex flex-col justify-between"

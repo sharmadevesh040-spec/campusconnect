@@ -22,17 +22,17 @@ export default function AdminEventsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
-    title: 'University Tech Innovation Showcase',
-    description: 'Annual campus expo demonstrating student ambassador community software and hardware projects.',
+    title: '',
+    description: '',
     date: safeFormatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
-    time: '02:00 PM - 05:00 PM',
-    venue: 'Auditorium Hall B & Online Stream',
-    meetingLink: 'https://campusconnect.live/expo-2026',
-    organizer: 'CampusConnect Committee',
-    maxParticipants: 300,
+    time: '10:00 AM - 12:00 PM',
+    venue: '',
+    meetingLink: '',
+    organizer: '',
+    maxParticipants: 100,
     status: EventStatus.OPEN,
     imageURL: '',
-    tags: ['Tech', 'Showcase', 'Exhibition']
+    tags: ['Ambassador', 'Campus']
   })
 
   const loadData = async () => {

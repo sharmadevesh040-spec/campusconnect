@@ -369,67 +369,13 @@ var FallbackStore = class {
       }
     ],
     interviews: [],
-    events: [
-      {
-        id: "evt-101",
-        title: "Annual Campus Ambassador Tech Summit 2026",
-        description: "Join ambassadors across university campuses for keynotes, workshops, and AI project showcases.",
-        date: "2026-11-20",
-        time: "10:00 AM - 04:00 PM",
-        venue: "Auditorium Hall A & Online Stream",
-        meeting_link: "https://campusconnect.live/summit-2026",
-        max_participants: 250,
-        organizer: "CampusConnect Steering Committee",
-        registration_deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1e3),
-        status: "Open",
-        registered_count: 142
-      },
-      {
-        id: "evt-102",
-        title: "Cloud Architecture & AI Ethics Masterclass",
-        description: "Hands-on practical session covering scalable cloud deployment and ethical guidelines for generative AI tools.",
-        date: "2026-11-25",
-        time: "02:00 PM - 05:00 PM",
-        venue: "Virtual Innovation Lab",
-        meeting_link: "https://campusconnect.live/cloud-masterclass",
-        max_participants: 150,
-        organizer: "Cloud Mentorship Initiative",
-        registration_deadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1e3),
-        status: "Open",
-        registered_count: 89
-      }
-    ],
+    events: [],
     event_registrations: [],
     tasks: [],
     announcements: [],
     notifications: [],
     audit_logs: [],
-    resources: [
-      {
-        id: "res-101",
-        title: "STAR Method Interview Guide & Framework",
-        description: "Master behavioral and leadership questions with structured Situation, Task, Action, Result frameworks.",
-        category: "Interview Preparation",
-        type: "PDF",
-        url: "https://example.com/star-guide.pdf"
-      },
-      {
-        id: "res-102",
-        title: "Technical Resume & Portfolio Template (2026)",
-        description: "ATS-optimized LaTeX and Markdown engineering resume templates tailored for top tech campus roles.",
-        category: "Resume & Portfolio",
-        type: "Template",
-        url: "https://example.com/resume-template"
-      },
-      {
-        id: "res-103",
-        title: "Cloud Architecture Cheatsheet & Diagramming Kit",
-        description: "Comprehensive quick-reference guide covering serverless compute, microservices, and storage patterns.",
-        category: "Technical Guides",
-        type: "Guide",
-        url: "https://example.com/cloud-cheatsheet"
-      }
-    ]
+    resources: []
   };
   storePath = path.join(os.tmpdir(), "campusconnect_fallback_store.json");
   init() {
@@ -447,6 +393,11 @@ var FallbackStore = class {
       }
     } catch {
     }
+    this.data.events = (this.data.events || []).filter((e) => !e.id?.startsWith("evt-10"));
+    this.data.resources = (this.data.resources || []).filter((r) => !r.id?.startsWith("res-10"));
+    this.data.interviews = [];
+    this.data.tasks = [];
+    this.data.announcements = [];
     console.log("[FallbackStore] Initialized resilient in-memory store.");
   }
   save() {
@@ -854,33 +805,13 @@ async function seedDatabase() {
   const defaultEvents = [];
   const defaultTasks = [];
   const defaultAnnouncements = [];
-  const defaultResources = [
-    {
-      id: "res-101",
-      title: "STAR Method Interview Guide & Framework",
-      description: "Master behavioral and leadership questions with structured Situation, Task, Action, Result frameworks.",
-      category: "Interview Preparation",
-      type: "PDF",
-      url: "https://example.com/star-guide.pdf"
-    },
-    {
-      id: "res-102",
-      title: "Campus Ambassador Official Brand & Media Kit",
-      description: "High-res logos, presentation templates, badges, and flyer kits for running campus events.",
-      category: "Program Guidelines",
-      type: "Website",
-      url: "https://example.com/ambassador-kit"
-    }
-  ];
+  const defaultResources = [];
   for (const u of defaultUsers) {
     const idx = fallbackStore.data.users.findIndex((existing) => existing.email === u.email);
     if (idx === -1) {
       fallbackStore.data.users.push(u);
       fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: "prof-" + u.id });
     }
-  }
-  if (!fallbackStore.data.resources || fallbackStore.data.resources.length === 0) {
-    fallbackStore.data.resources = defaultResources;
   }
   try {
     for (const u of defaultUsers) {
@@ -931,6 +862,8 @@ async function seedDatabase() {
         [c.id, c.certificate_id, c.student_id, c.certificate_name, c.program, c.issue_date, c.file_key, c.file_url, c.qr_code, c.status]
       );
     }
+    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`);
+    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`);
     for (const e of defaultEvents) {
       await query(
         `INSERT INTO events (id, title, description, date, time, venue, meeting_link, max_participants, banner_url, organizer, registration_deadline, status)

@@ -86,25 +86,7 @@ export async function seedDatabase() {
   const defaultEvents: any[] = []
   const defaultTasks: any[] = []
   const defaultAnnouncements: any[] = []
-
-  const defaultResources = [
-    {
-      id: 'res-101',
-      title: 'STAR Method Interview Guide & Framework',
-      description: 'Master behavioral and leadership questions with structured Situation, Task, Action, Result frameworks.',
-      category: 'Interview Preparation',
-      type: 'PDF',
-      url: 'https://example.com/star-guide.pdf'
-    },
-    {
-      id: 'res-102',
-      title: 'Campus Ambassador Official Brand & Media Kit',
-      description: 'High-res logos, presentation templates, badges, and flyer kits for running campus events.',
-      category: 'Program Guidelines',
-      type: 'Website',
-      url: 'https://example.com/ambassador-kit'
-    }
-  ]
+  const defaultResources: any[] = []
 
   // Safely seed Fallback Store without wiping registered users
   for (const u of defaultUsers) {
@@ -113,9 +95,6 @@ export async function seedDatabase() {
       fallbackStore.data.users.push(u)
       fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: 'prof-' + u.id })
     }
-  }
-  if (!fallbackStore.data.resources || fallbackStore.data.resources.length === 0) {
-    fallbackStore.data.resources = defaultResources
   }
 
   // If connected to PostgreSQL, insert records
@@ -161,6 +140,10 @@ export async function seedDatabase() {
         [c.id, c.certificate_id, c.student_id, c.certificate_name, c.program, c.issue_date, c.file_key, c.file_url, c.qr_code, c.status]
       )
     }
+
+    // Clean up any legacy placeholder mock data from resources and events
+    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`)
+    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`)
 
     for (const e of defaultEvents) {
       await query(

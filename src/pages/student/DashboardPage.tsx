@@ -8,6 +8,7 @@ import { safeTime, safeFormatDate } from '@/lib/dateUtils'
 import { useAuth } from '@/hooks/useAuth'
 import { useEvents } from '@/hooks/useEvents'
 import { useCertificates } from '@/hooks/useCertificates'
+import { useResources } from '@/hooks/useResources'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -30,6 +31,7 @@ export default function DashboardPage() {
   const { userProfile } = useAuth()
   const { events, loading: eLoading } = useEvents()
   const { certificates, loading: cLoading, downloadCertificate } = useCertificates()
+  const { resources, loading: rLoading } = useResources()
 
   const [activeTab, setActiveTab] = useState<'all' | 'credentials' | 'events' | 'idcard'>('all')
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
@@ -399,39 +401,38 @@ export default function DashboardPage() {
               </Link>
             </div>
             
-            <div className="lookap-card p-5 space-y-4">
-              <div className="flex items-start gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-blue-500/30 transition-all">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center flex-shrink-0">
-                  <GraduationCap className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-semibold text-white">Campus Ambassador Brand & Media Kit</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">High-res vector badges, presentation decks, and campus flyer templates.</p>
-                </div>
-                <Link to="/student/resources">
-                  <ArrowUpRight className="w-4 h-4 text-slate-400 hover:text-white" />
-                </Link>
+            {rLoading ? (
+              <SkeletonCard />
+            ) : resources.length === 0 ? (
+              <Card className="p-6">
+                <EmptyState
+                  emoji="📚"
+                  title="No resources published yet"
+                  description="Official study materials and program toolkits will appear here once published."
+                />
+              </Card>
+            ) : (
+              <div className="lookap-card p-5 space-y-3">
+                {resources.slice(0, 3).map(res => (
+                  <a
+                    key={res.id}
+                    href={res.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-blue-500/30 transition-all block"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center flex-shrink-0">
+                      <GraduationCap className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-semibold text-white truncate">{res.title}</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{res.description}</p>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-slate-400 hover:text-white flex-shrink-0" />
+                  </a>
+                ))}
               </div>
-
-              <div className="flex items-start gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-purple-500/30 transition-all">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center flex-shrink-0">
-                  <Award className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-semibold text-white">Official Credential Verification Guide</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">How cryptographic SHA-256 signatures validate your academic credentials.</p>
-                </div>
-                <Link to="/student/resources">
-                  <ArrowUpRight className="w-4 h-4 text-slate-400 hover:text-white" />
-                </Link>
-              </div>
-
-              <Link to="/student/resources">
-                <Button variant="outline" size="sm" className="w-full text-xs mt-1" leftIcon={<BookOpen className="w-3.5 h-3.5" />}>
-                  Explore All Learning Guides
-                </Button>
-              </Link>
-            </div>
+            )}
           </div>
         </div>
       )}
