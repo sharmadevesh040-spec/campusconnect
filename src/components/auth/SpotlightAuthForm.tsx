@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, User, Eye, EyeOff, Sparkles, Shield, Send, CheckCircle2, Phone, Hash, ArrowRight, KeyRound } from 'lucide-react'
+import { Mail, Lock, User, Eye, EyeOff, Sparkles, Shield, Send, CheckCircle2, Phone, Hash, ArrowRight, RotateCw, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { apiRequest, setToken } from '@/services/api'
@@ -12,7 +12,7 @@ interface SpotlightAuthFormProps {
   initialMode?: 'login' | 'register'
 }
 
-type ActiveField = 'fullName' | 'email' | 'password' | 'confirmPassword' | 'phone' | 'studentId' | 'accessCode' | 'otp' | 'button' | null
+type ActiveField = 'fullName' | 'email' | 'password' | 'confirmPassword' | 'phone' | 'studentId' | 'otp' | 'button' | null
 
 export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAuthFormProps) {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode)
@@ -36,9 +36,11 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
   const [regEmail, setRegEmail] = useState('')
   const [regPhone, setRegPhone] = useState('')
   const [regStudentId, setRegStudentId] = useState('')
-  const [regAccessCode, setRegAccessCode] = useState('')
   const [regPassword, setRegPassword] = useState('')
   const [regConfirmPassword, setRegConfirmPassword] = useState('')
+  const [regStep, setRegStep] = useState<'details' | 'otp'>('details')
+  const [regOtpCode, setRegOtpCode] = useState('')
+  const [regOtpSending, setRegOtpSending] = useState(false)
 
   const { login, loginWithSession, register: authRegister } = useAuth()
   const navigate = useNavigate()
@@ -56,7 +58,7 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
     })
     ro.observe(cardRef.current)
     return () => ro.disconnect()
-  }, [mode, loginMethod, otpSent])
+  }, [mode, loginMethod, otpSent, regStep])
 
   // Field Y-coordinates relative to card height
   const fieldYMap = useMemo<Record<string, number>>(() => {
@@ -72,16 +74,20 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
         map.button = 375
       }
     } else {
-      map.fullName = 165
-      map.email = 225
-      map.studentId = 285
-      map.accessCode = 345
-      map.password = 410
-      map.confirmPassword = 475
-      map.button = 545
+      if (regStep === 'otp') {
+        map.otp = 210
+        map.button = 300
+      } else {
+        map.fullName = 165
+        map.email = 230
+        map.studentId = 295
+        map.password = 365
+        map.confirmPassword = 435
+        map.button = 510
+      }
     }
     return map
-  }, [mode, loginMethod])
+  }, [mode, loginMethod, regStep])
 
   // Spotlight positions in px (card coordinate system, card width ~ 460px)
   const lampLeft = { x: 48, y: 36 }
@@ -197,7 +203,7 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
     }
   }
 
-  // Handle Registration Submit
+  // Handle Registration Step 1: Submit details & dispatch OTP
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!regName.trim() || !regEmail.trim() || !regPassword) {
@@ -213,41 +219,82 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
       return
     }
 
-    // Program Access Code Authentication
-    const validCodes = ['GSA2026', 'GSA-2026', 'CAMPUS2026', 'CC2026', 'AMBASSADOR', 'AMBASSADOR2026', 'CAMPUSCONNECT', 'DEVESH2026', 'STUDENT2026', 'PAPA@123']
-    const enteredCode = regAccessCode.trim().toUpperCase()
-    if (!enteredCode) {
-      toast.error('Ambassador Access Code Required', {
-        description: 'Please enter your program authentication code (e.g. GSA2026 or CC2026) provided by your campus administrator.'
+    setSubmitting(true)
+    try {
+      const studentData = {
+        phone: regPhone.trim() || '+91 9876543210',
+        studentId: regStudentId.trim() || 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000)
+      }
+      await authRegister(regEmail.trim(), regPassword, regName.trim(), studentData)
+      setRegStep('otp')
+      setActiveField('otp')
+      toast.success('Registration Initiated!', {
+        description: '6-digit OTP verification code dispatched to your email via SMTP.'
       })
-      setActiveField('accessCode')
-      return
+    } catch (err: any) {
+      toast.error('Registration failed', { description: err.message || 'Unable to complete registration.' })
+    } finally {
+      setSubmitting(false)
     }
-    if (!validCodes.includes(enteredCode)) {
-      toast.error('Invalid Program Code', {
-        description: 'The access code is not recognized. Please use an official code (e.g. GSA2026 or CAMPUS2026).'
-      })
-      setActiveField('accessCode')
+  }
+
+  // Handle Registration Step 2: Verify OTP & Activate Account
+  const handleVerifyRegistrationOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!regOtpCode.trim() || regOtpCode.trim().length !== 6) {
+      toast.error('Please enter the 6-digit OTP sent to your email')
       return
     }
 
     setSubmitting(true)
     try {
-      const studentData = {
-        phone: regPhone.trim() || '+91 9876543210',
-        studentId: regStudentId.trim() || 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000),
-        accessCode: enteredCode
-      }
-      await authRegister(regEmail.trim(), regPassword, regName.trim(), studentData)
-      toast.success('Ambassador Account Created!', {
-        description: 'A 6-digit confirmation code was sent to your email. Enter the code to activate your account.'
+      const res = await apiRequest<{ message: string; token?: string; user?: any }>('/api/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: regEmail.trim(),
+          code: regOtpCode.trim()
+        })
       })
-      // Direct to verify email page WITHOUT passing code in query parameters (forces manual code entry)
-      navigate(`/verify-email?email=${encodeURIComponent(regEmail.trim())}`)
+
+      toast.success('Email Verified Successfully!', {
+        description: 'Welcome to CampusConnect Ambassador Network.'
+      })
+
+      if (res.token && res.user) {
+        loginWithSession(res.token, res.user)
+        const email = (res.user?.email || regEmail).toLowerCase().trim()
+        const role = res.user?.role
+        if (email === AUTHORIZED_ADMIN_EMAIL.toLowerCase() || role === 'admin' || role === 'super_admin' || role === UserRole.ADMIN) {
+          navigate('/admin/dashboard')
+        } else {
+          navigate('/student/dashboard')
+        }
+      } else {
+        navigate('/login')
+      }
     } catch (err: any) {
-      toast.error('Registration failed', { description: err.message || 'Unable to complete registration.' })
+      toast.error('OTP Verification Failed', {
+        description: err.message || 'Invalid or expired OTP. Please request a new code.'
+      })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // Resend OTP for Registration
+  const handleResendRegistrationOtp = async () => {
+    if (!regEmail.trim()) return
+    setRegOtpSending(true)
+    try {
+      await apiRequest('/api/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email: regEmail.trim() })
+      })
+      toast.success('New 6-digit OTP dispatched to your email inbox!')
+    } catch (err: any) {
+      toast.error('Failed to resend OTP', { description: err.message })
+    } finally {
+      setRegOtpSending(false)
     }
   }
 
@@ -692,202 +739,252 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
             </div>
           ) : (
             /* ======================================================= */
-            /* REGISTRATION FORM (Spotlight Follows Each Step)          */
+            /* REGISTRATION FORM (Two-Step: Details -> Email OTP Code) */
             /* ======================================================= */
-            <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-              {/* 1. Full Name */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Full Name</label>
-                <div 
-                  className={`relative rounded-2xl transition-all duration-300 ${
-                    activeField === 'fullName'
-                      ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
-                      : 'bg-[#151518] border border-white/[0.08]'
-                  }`}
-                >
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    value={regName}
-                    onChange={e => setRegName(e.target.value)}
-                    onFocus={() => setActiveField('fullName')}
-                    placeholder="Tushti Sachdeva"
-                    className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* 2. Email Address */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Email Address</label>
-                <div 
-                  className={`relative rounded-2xl transition-all duration-300 ${
-                    activeField === 'email'
-                      ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
-                      : 'bg-[#151518] border border-white/[0.08]'
-                  }`}
-                >
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="email"
-                    value={regEmail}
-                    onChange={e => setRegEmail(e.target.value)}
-                    onFocus={() => setActiveField('email')}
-                    placeholder="contact@university.edu"
-                    className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* 3. Student ID & Phone (Dual Grid) */}
-              <div className="grid grid-cols-2 gap-2.5">
+            regStep === 'details' ? (
+              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                {/* 1. Full Name */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Student ID</label>
+                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Full Name</label>
                   <div 
                     className={`relative rounded-2xl transition-all duration-300 ${
-                      activeField === 'studentId'
+                      activeField === 'fullName'
                         ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
                         : 'bg-[#151518] border border-white/[0.08]'
                     }`}
                   >
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
-                      <Hash className="w-3.5 h-3.5" />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
+                      <User className="w-4 h-4" />
                     </div>
                     <input
                       type="text"
-                      value={regStudentId}
-                      onChange={e => setRegStudentId(e.target.value)}
-                      onFocus={() => setActiveField('studentId')}
-                      placeholder="GSA-2026-001"
-                      className="w-full bg-transparent pl-8 pr-3 py-2.5 text-xs text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      value={regName}
+                      onChange={e => setRegName(e.target.value)}
+                      onFocus={() => setActiveField('fullName')}
+                      placeholder="Student Full Name"
+                      className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      required
                     />
                   </div>
                 </div>
 
+                {/* 2. Email Address */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Phone</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Email Address</label>
+                    <span className="text-[10px] font-mono text-amber-300/80 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">OTP VERIFICATION REQUIRED</span>
+                  </div>
                   <div 
                     className={`relative rounded-2xl transition-all duration-300 ${
-                      activeField === 'phone'
+                      activeField === 'email'
                         ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
                         : 'bg-[#151518] border border-white/[0.08]'
                     }`}
                   >
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
-                      <Phone className="w-3.5 h-3.5" />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
+                      <Mail className="w-4 h-4" />
                     </div>
                     <input
-                      type="tel"
-                      value={regPhone}
-                      onChange={e => setRegPhone(e.target.value)}
-                      onFocus={() => setActiveField('phone')}
-                      placeholder="+91 98765..."
-                      className="w-full bg-transparent pl-8 pr-3 py-2.5 text-xs text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      type="email"
+                      value={regEmail}
+                      onChange={e => setRegEmail(e.target.value)}
+                      onFocus={() => setActiveField('email')}
+                      placeholder="student@university.edu"
+                      className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      required
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* 3.5. Ambassador Program Access Code */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Ambassador Access Code</label>
-                  <span className="text-[10px] font-mono text-amber-300/80 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">CODE AUTHENTICATION</span>
-                </div>
-                <div 
-                  className={`relative rounded-2xl transition-all duration-300 ${
-                    activeField === 'accessCode'
-                      ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
-                      : 'bg-[#151518] border border-white/[0.08]'
-                  }`}
-                >
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
-                    <KeyRound className="w-4 h-4 text-amber-400" />
+                {/* 3. Student ID & Phone (Dual Grid) */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Student ID</label>
+                    <div 
+                      className={`relative rounded-2xl transition-all duration-300 ${
+                        activeField === 'studentId'
+                          ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+                          : 'bg-[#151518] border border-white/[0.08]'
+                      }`}
+                    >
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                        <Hash className="w-3.5 h-3.5" />
+                      </div>
+                      <input
+                        type="text"
+                        value={regStudentId}
+                        onChange={e => setRegStudentId(e.target.value)}
+                        onFocus={() => setActiveField('studentId')}
+                        placeholder="GSA-2026-001"
+                        className="w-full bg-transparent pl-8 pr-3 py-2.5 text-xs text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={regAccessCode}
-                    onChange={e => setRegAccessCode(e.target.value)}
-                    onFocus={() => setActiveField('accessCode')}
-                    placeholder="Enter program code (e.g. GSA2026)"
-                    className="w-full bg-transparent pl-10 pr-4 py-2.5 text-xs font-mono uppercase tracking-wider text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
-                    required
-                  />
-                </div>
-                <p className="text-[10px] text-zinc-500 pl-1">
-                  Required: Institutional authentication code provided by campus admin (e.g. GSA2026)
-                </p>
-              </div>
 
-              {/* 4. Password */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Create Password</label>
-                <div 
-                  className={`relative rounded-2xl transition-all duration-300 ${
-                    activeField === 'password'
-                      ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
-                      : 'bg-[#151518] border border-white/[0.08]'
-                  }`}
-                >
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
-                    <Lock className="w-4 h-4" />
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Phone</label>
+                    <div 
+                      className={`relative rounded-2xl transition-all duration-300 ${
+                        activeField === 'phone'
+                          ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+                          : 'bg-[#151518] border border-white/[0.08]'
+                      }`}
+                    >
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                        <Phone className="w-3.5 h-3.5" />
+                      </div>
+                      <input
+                        type="tel"
+                        value={regPhone}
+                        onChange={e => setRegPhone(e.target.value)}
+                        onFocus={() => setActiveField('phone')}
+                        placeholder="+91 98765..."
+                        className="w-full bg-transparent pl-8 pr-3 py-2.5 text-xs text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="password"
-                    value={regPassword}
-                    onChange={e => setRegPassword(e.target.value)}
-                    onFocus={() => setActiveField('password')}
-                    placeholder="••••••••••••"
-                    className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
-                    required
-                  />
                 </div>
-              </div>
 
-              {/* 5. Confirm Password */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Confirm Password</label>
-                <div 
-                  className={`relative rounded-2xl transition-all duration-300 ${
-                    activeField === 'confirmPassword'
-                      ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
-                      : 'bg-[#151518] border border-white/[0.08]'
-                  }`}
-                >
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
-                    <Lock className="w-4 h-4" />
+                {/* 4. Password */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Create Password</label>
+                  <div 
+                    className={`relative rounded-2xl transition-all duration-300 ${
+                      activeField === 'password'
+                        ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+                        : 'bg-[#151518] border border-white/[0.08]'
+                    }`}
+                  >
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="password"
+                      value={regPassword}
+                      onChange={e => setRegPassword(e.target.value)}
+                      onFocus={() => setActiveField('password')}
+                      placeholder="••••••••••••"
+                      className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      required
+                    />
                   </div>
-                  <input
-                    type="password"
-                    value={regConfirmPassword}
-                    onChange={e => setRegConfirmPassword(e.target.value)}
-                    onFocus={() => setActiveField('confirmPassword')}
-                    placeholder="••••••••••••"
-                    className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
-                    required
-                  />
                 </div>
-              </div>
 
-              {/* Machined Convex Sign Up Button */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  onFocus={() => setActiveField('button')}
-                  className="w-full relative py-3.5 px-6 rounded-2xl font-semibold text-sm tracking-wide text-zinc-950 transition-all duration-200 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.9),0_6px_20px_rgba(0,0,0,0.5)] active:translate-y-[1px] disabled:opacity-50 overflow-hidden bg-gradient-to-b from-[#f5f5f7] via-[#d4d4d8] to-[#9999a1] hover:brightness-105 active:brightness-95 flex items-center justify-center gap-2"
-                >
-                  <span>{submitting ? 'Creating Ambassador Profile...' : 'Complete Stage Sign Up'}</span>
-                  <ArrowRight className="w-4 h-4 text-zinc-900" />
-                </button>
-              </div>
-            </form>
+                {/* 5. Confirm Password */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">Confirm Password</label>
+                  <div 
+                    className={`relative rounded-2xl transition-all duration-300 ${
+                      activeField === 'confirmPassword'
+                        ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+                        : 'bg-[#151518] border border-white/[0.08]'
+                    }`}
+                  >
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="password"
+                      value={regConfirmPassword}
+                      onChange={e => setRegConfirmPassword(e.target.value)}
+                      onFocus={() => setActiveField('confirmPassword')}
+                      placeholder="••••••••••••"
+                      className="w-full bg-transparent pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Machined Convex Sign Up Button */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    onFocus={() => setActiveField('button')}
+                    className="w-full relative py-3.5 px-6 rounded-2xl font-semibold text-sm tracking-wide text-zinc-950 transition-all duration-200 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.9),0_6px_20px_rgba(0,0,0,0.5)] active:translate-y-[1px] disabled:opacity-50 overflow-hidden bg-gradient-to-b from-[#f5f5f7] via-[#d4d4d8] to-[#9999a1] hover:brightness-105 active:brightness-95 flex items-center justify-center gap-2"
+                  >
+                    <span>{submitting ? 'Registering & Sending OTP...' : 'Register & Send Verification OTP'}</span>
+                    <Send className="w-4 h-4 text-zinc-900" />
+                  </button>
+                  <p className="text-[10px] text-zinc-500 text-center mt-2">
+                    A 6-digit verification code will be sent to your email to authenticate your account.
+                  </p>
+                </div>
+              </form>
+            ) : (
+              /* Step 2: OTP Verification Form */
+              <form onSubmit={handleVerifyRegistrationOtp} className="space-y-4">
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <span className="font-semibold text-amber-300">Verification OTP Dispatched!</span>
+                  </div>
+                  <p className="text-zinc-300 text-[11px] leading-relaxed">
+                    We sent a 6-digit authentication code to <span className="font-mono text-amber-200 font-medium">{regEmail}</span>. Enter it below to activate your account.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">6-Digit Email OTP</label>
+                  <div 
+                    className={`relative rounded-2xl transition-all duration-300 ${
+                      activeField === 'otp'
+                        ? 'bg-gradient-to-b from-[#fffbe8]/20 via-[#d4af37]/15 to-black/60 border border-amber-300/80 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+                        : 'bg-[#151518] border border-white/[0.08]'
+                    }`}
+                  >
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
+                      <ShieldCheck className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={regOtpCode}
+                      onChange={e => setRegOtpCode(e.target.value.replace(/\D/g, ''))}
+                      onFocus={() => setActiveField('otp')}
+                      placeholder="123456"
+                      className="w-full bg-transparent text-center font-mono tracking-[0.5em] text-xl py-3 text-white placeholder-zinc-600 rounded-2xl focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 space-y-3">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    onFocus={() => setActiveField('button')}
+                    className="w-full relative py-3.5 px-6 rounded-2xl font-semibold text-sm tracking-wide text-zinc-950 transition-all duration-200 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.9),0_6px_20px_rgba(0,0,0,0.5)] active:translate-y-[1px] disabled:opacity-50 overflow-hidden bg-gradient-to-b from-[#f5f5f7] via-[#d4d4d8] to-[#9999a1] hover:brightness-105 active:brightness-95 flex items-center justify-center gap-2"
+                  >
+                    <span>{submitting ? 'Verifying OTP & Activating...' : 'Verify OTP & Enter CampusConnect'}</span>
+                    <ArrowRight className="w-4 h-4 text-zinc-900" />
+                  </button>
+
+                  <div className="flex items-center justify-between text-xs pt-1 px-1">
+                    <button
+                      type="button"
+                      onClick={handleResendRegistrationOtp}
+                      disabled={regOtpSending}
+                      className="text-amber-300 hover:text-amber-200 disabled:opacity-50 flex items-center gap-1 font-medium transition-colors"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${regOtpSending ? 'animate-spin' : ''}`} />
+                      <span>{regOtpSending ? 'Resending Code...' : 'Resend OTP Code'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRegStep('details')
+                        setActiveField('email')
+                      }}
+                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-4 transition-colors"
+                    >
+                      Edit Details
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )
           )}
 
           {/* Footer Navigation */}

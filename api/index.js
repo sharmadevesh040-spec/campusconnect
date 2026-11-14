@@ -1656,7 +1656,54 @@ router.post("/verify-email", async (req, res) => {
       await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id]);
     }
     await query(`UPDATE users SET is_verified = true WHERE LOWER(email) = LOWER($1)`, [normalizedEmail]);
-    res.json({ message: "Email verified successfully! Your account is now active." });
+    const userRes = await query(
+      `SELECT u.id, u.email, u.role, u.is_verified,
+              p.id as profile_id, p.full_name, p.student_id, p.phone, p.university, p.college,
+              p.course, p.branch, p.year, p.semester, p.skills, p.bio, p.avatar_url,
+              p.completion_pct, p.is_active
+       FROM users u
+       LEFT JOIN profiles p ON u.id = p.user_id
+       WHERE LOWER(u.email) = LOWER($1)`,
+      [normalizedEmail]
+    );
+    let token;
+    let userData = void 0;
+    if (userRes.rows.length > 0) {
+      const row = userRes.rows[0];
+      token = generateToken({
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        studentId: row.student_id
+      });
+      userData = {
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        is_verified: true,
+        profile: {
+          id: row.profile_id || row.id,
+          user_id: row.id,
+          full_name: row.full_name || row.email,
+          student_id: row.student_id || "GSA-2026-001",
+          phone: row.phone || "",
+          university: row.university || "University",
+          college: row.college || "College",
+          course: row.course || "B.Tech",
+          branch: row.branch || "Computer Science",
+          year: row.year || 1,
+          semester: row.semester || 1,
+          avatar_url: row.avatar_url,
+          completion_pct: row.completion_pct || 85,
+          is_active: row.is_active ?? true
+        }
+      };
+    }
+    res.json({
+      message: "Email verified successfully! Your account is now active.",
+      token,
+      user: userData
+    });
   } catch (err) {
     console.error("[Verify Email Error]", err);
     res.status(500).json({ error: err.message || "Email verification failed" });

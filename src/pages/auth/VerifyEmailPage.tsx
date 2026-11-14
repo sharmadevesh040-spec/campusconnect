@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { MailCheck, ArrowRight, RotateCw, CheckCircle2, ShieldCheck, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiRequest } from '@/services/api'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { loginWithSession } = useAuth()
 
   const [email, setEmail] = useState(searchParams.get('email') || '')
   const [code, setCode] = useState(searchParams.get('code') || '')
@@ -22,7 +24,7 @@ export default function VerifyEmailPage() {
 
     setLoading(true)
     try {
-      const res = await apiRequest<{ message: string }>('/api/auth/verify-email', {
+      const res = await apiRequest<{ message: string; token?: string; user?: any }>('/api/auth/verify-email', {
         method: 'POST',
         body: JSON.stringify({
           email: verifyEmail.trim(),
@@ -32,6 +34,13 @@ export default function VerifyEmailPage() {
 
       setVerified(true)
       toast.success(res.message || 'Email verified successfully!')
+
+      if (res.token && res.user) {
+        loginWithSession(res.token, res.user)
+        setTimeout(() => {
+          navigate('/student/dashboard')
+        }, 1200)
+      }
     } catch (err: any) {
       toast.error('Verification failed', {
         description: err.message || 'Invalid or expired verification code. Please request a new one.'
