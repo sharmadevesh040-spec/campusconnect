@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import type { Profile } from '@/types'
 import { UserRole } from '@/types'
 import { apiRequest, setToken, clearToken, getToken } from '@/services/api'
+import { safeParseSkills } from '@/lib/dateUtils'
 
 interface AuthContextType {
   currentUser: { uid: string; email: string | null; displayName: string | null; photoURL: string | null } | null
@@ -9,6 +10,7 @@ interface AuthContextType {
   loading: boolean
   role: UserRole | null
   login: (email: string, password: string) => Promise<any>
+  loginWithSession: (token: string, user: any) => void
   register: (email: string, password: string, name: string, studentData?: any) => Promise<any>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
@@ -18,26 +20,26 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 function mapProfile(u: any): Profile {
-  const p = u.profile || {}
+  const p = u?.profile || {}
   return {
-    id: p.id || u.id,
-    userId: u.id,
-    fullName: p.full_name || u.email,
-    email: u.email,
+    id: p.id || u?.id || 'id-default',
+    userId: u?.id || 'uid-default',
+    fullName: p.full_name || u?.email || 'Student Ambassador',
+    email: u?.email || '',
     phone: p.phone || '',
     studentId: p.student_id || 'GSA-2026-001',
     university: p.university || 'University',
     college: p.college || 'College',
     course: p.course || 'B.Tech',
     branch: p.branch || 'Computer Science',
-    year: p.year || 2,
-    semester: p.semester || 3,
-    skills: Array.isArray(p.skills) ? p.skills : (p.skills ? JSON.parse(p.skills) : []),
+    year: Number(p.year) || 2,
+    semester: Number(p.semester) || 3,
+    skills: safeParseSkills(p.skills),
     bio: p.bio || '',
-    photoURL: p.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.full_name || u.email)}`,
-    completionPercentage: p.completion_pct || 85,
+    photoURL: p.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.full_name || u?.email || 'Student')}`,
+    completionPercentage: Number(p.completion_pct) || 85,
     isApproved: p.is_active ?? true,
-    role: (u.role as UserRole) || UserRole.STUDENT,
+    role: (u?.role as UserRole) || UserRole.STUDENT,
     createdAt: new Date(),
     updatedAt: new Date()
   }
@@ -109,6 +111,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       throw new Error('Authentication failed: Missing token or user profile')
     }
+  }
+
+  const loginWithSession = (token: string, user: any) => {
+    setToken(token)
+    const prof = mapProfile(user)
+    setCurrentUser({
+      uid: user.id,
+      email: user.email,
+      displayName: prof.fullName,
+      photoURL: prof.photoURL
+    })
+    setUserProfile(prof)
+    setRole(prof.role || UserRole.STUDENT)
   }
 
   const register = async (email: string, password: string, name: string, studentData?: any) => {
@@ -183,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         role,
         login,
+        loginWithSession,
         register,
         logout,
         resetPassword,

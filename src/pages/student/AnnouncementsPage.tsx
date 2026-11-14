@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Bell, Paperclip, ChevronDown, ChevronUp, CheckCheck } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 import { useAnnouncements } from '@/hooks/useAnnouncements'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -62,7 +62,7 @@ export default function AnnouncementsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span>{format(a.publishedAt || a.createdAt || Date.now(), 'dd MMM yyyy')}</span>
+                      <span>{safeFormatDate(a.publishedAt || a.createdAt, 'dd MMM yyyy')}</span>
                       {a.category && <><span>·</span><span>{a.category}</span></>}
                       {a.attachmentURL && <><span>·</span><Paperclip className="w-3 h-3" /></>}
                     </div>

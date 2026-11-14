@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CheckSquare, Circle, Clock, AlertCircle } from 'lucide-react'
-import { format, isPast } from 'date-fns'
+import { isPast } from 'date-fns'
+import { safeTime, safeFormatDate, safeDate } from '@/lib/dateUtils'
 import { useTasks } from '@/hooks/useTasks'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -24,7 +25,7 @@ export default function TasksPage() {
   const [updating, setUpdating] = useState<string | null>(null)
 
   const filtered = tasks.filter(t => filter === 'all' || t.status === filter)
-    .sort((a, b) => a.deadline.getTime() - b.deadline.getTime())
+    .sort((a, b) => safeTime(a.deadline) - safeTime(b.deadline))
 
   const completed = tasks.filter(t => t.status === TaskStatus.COMPLETED).length
   const total = tasks.length
@@ -92,7 +93,7 @@ export default function TasksPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map(task => {
-            const isOverdue = isPast(task.deadline) && task.status !== TaskStatus.COMPLETED
+            const isOverdue = isPast(safeDate(task.deadline)) && task.status !== TaskStatus.COMPLETED
             const isCompleted = task.status === TaskStatus.COMPLETED
             return (
               <Card key={task.id} className={cn('p-4 transition-all', isCompleted && 'opacity-60 bg-slate-50/50 dark:bg-slate-800/40')}>
@@ -115,7 +116,7 @@ export default function TasksPage() {
                     <div className="flex items-center gap-3 mt-2">
                       <span className={cn('flex items-center gap-1 text-xs', isOverdue && !isCompleted ? 'text-red-500 font-medium' : 'text-slate-400')}>
                         <Clock className="w-3 h-3" />
-                        {isOverdue && !isCompleted ? 'Overdue · ' : 'Due '}{format(task.deadline, 'dd MMM yyyy')}
+                        {isOverdue && !isCompleted ? 'Overdue · ' : 'Due '}{safeFormatDate(task.deadline, 'dd MMM yyyy')}
                       </span>
                       <Badge variant={task.priority === 'high' ? 'danger' : task.priority === 'medium' ? 'warning' : 'default'}>
                         {task.priority}

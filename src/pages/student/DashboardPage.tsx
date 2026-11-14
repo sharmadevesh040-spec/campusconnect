@@ -5,7 +5,7 @@ import {
   ChevronRight, Mic2, Eye, Download, ShieldCheck, Sparkles,
   ArrowUpRight, Target, Activity, Users, BookOpen
 } from 'lucide-react'
-import { format, isToday, isTomorrow } from 'date-fns'
+import { safeTime, safeFormatDate, safeGetInterviewDate } from '@/lib/dateUtils'
 import { useAuth } from '@/hooks/useAuth'
 import { useInterviews } from '@/hooks/useInterviews'
 import { useTasks } from '@/hooks/useTasks'
@@ -33,12 +33,6 @@ function getGreeting() {
   return 'Good evening'
 }
 
-function getInterviewDate(date: Date) {
-  if (isToday(date)) return 'Today'
-  if (isTomorrow(date)) return 'Tomorrow'
-  return format(date, 'dd MMM')
-}
-
 export default function DashboardPage() {
   const { userProfile } = useAuth()
   const { interviews, loading: iLoading } = useInterviews()
@@ -55,19 +49,20 @@ export default function DashboardPage() {
   const firstName = userProfile?.fullName?.split(' ')[0] || 'Student'
   const userRole = userProfile?.role || 'Campus Fellow'
 
-  const upcomingInterviews = interviews.filter(i =>
-    [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED].includes(i.status) && i.date > new Date()
-  ).sort((a, b) => a.date.getTime() - b.date.getTime())
+  const now = Date.now()
+  const upcomingInterviews = (interviews || []).filter(i =>
+    [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED].includes(i.status) && safeTime(i.date) > now
+  ).sort((a, b) => safeTime(a.date) - safeTime(b.date))
 
-  const pendingTasks = tasks.filter(t => t.status === TaskStatus.PENDING || t.status === TaskStatus.IN_PROGRESS)
-    .sort((a, b) => a.deadline.getTime() - b.deadline.getTime())
+  const pendingTasks = (tasks || []).filter(t => t.status === TaskStatus.PENDING || t.status === TaskStatus.IN_PROGRESS)
+    .sort((a, b) => safeTime(a.deadline) - safeTime(b.deadline))
 
-  const completedTasks = tasks.filter(t => t.status === TaskStatus.COMPLETED)
-  const taskCompletionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 100
+  const completedTasks = (tasks || []).filter(t => t.status === TaskStatus.COMPLETED)
+  const taskCompletionRate = (tasks && tasks.length > 0) ? Math.round((completedTasks.length / tasks.length) * 100) : 100
 
-  const upcomingEvents = events.filter(e =>
+  const upcomingEvents = (events || []).filter(e =>
     e.status === EventStatus.OPEN || e.status === EventStatus.ALMOST_FULL
-  ).sort((a, b) => a.date.getTime() - b.date.getTime())
+  ).sort((a, b) => safeTime(a.date) - safeTime(b.date))
 
   const nextInterview = upcomingInterviews[0]
 
@@ -76,7 +71,7 @@ export default function DashboardPage() {
       label: 'Upcoming Interviews',
       value: upcomingInterviews.length,
       icon: Mic2,
-      subtext: nextInterview ? `Next: ${format(nextInterview.date, 'p')}` : 'All caught up',
+      subtext: nextInterview ? `Next: ${safeFormatDate(nextInterview.date, 'p')}` : 'All caught up',
       dot: 'spec-dot-indigo',
       link: '/interviews'
     },
@@ -150,7 +145,7 @@ export default function DashboardPage() {
                 <span className="spec-dot-emerald" /> LIVE CAMPUS RADAR
               </span>
               <span className="spec-tag">CADENCE: ACTIVE</span>
-              <span className="spec-tag">{format(new Date(), 'dd MMM yyyy')}</span>
+              <span className="spec-tag">{safeFormatDate(new Date(), 'dd MMM yyyy')}</span>
             </div>
 
             <div>
@@ -160,7 +155,7 @@ export default function DashboardPage() {
               </h1>
               <p className="text-slate-300 text-sm mt-1 leading-relaxed">
                 {upcomingInterviews.length > 0
-                  ? `Your next interview starts at ${format(nextInterview.date, 'p')}. Make sure you're ready with meeting links & notes.`
+                  ? `Your next interview starts at ${safeFormatDate(nextInterview?.date, 'p')}. Make sure you're ready with meeting links & notes.`
                   : pendingTasks.length > 0
                   ? `You have ${pendingTasks.length} pending academic & program task${pendingTasks.length > 1 ? 's' : ''} to complete this week.`
                   : 'Welcome back! All your student program resources, interviews, and verified credentials are up to date.'}
@@ -286,7 +281,7 @@ export default function DashboardPage() {
                         {nextInterview.status}
                       </Badge>
                     </div>
-                    <span className="spec-tag">{getInterviewDate(nextInterview.date)}</span>
+                    <span className="spec-tag">{safeGetInterviewDate(nextInterview.date)}</span>
                   </div>
 
                   <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base mb-1 group-hover:text-blue-500 transition-colors">
@@ -342,7 +337,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{task.title}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="spec-tag text-[9px] py-0 px-1.5">DUE: {format(task.deadline, 'dd MMM')}</span>
+                        <span className="spec-tag text-[9px] py-0 px-1.5">DUE: {safeFormatDate(task.deadline, 'dd MMM')}</span>
                         <span className="text-[11px] font-mono text-slate-400 uppercase">{task.priority} PRIORITY</span>
                       </div>
                     </div>
@@ -408,7 +403,7 @@ export default function DashboardPage() {
 
                     <div className="lookap-recess p-2.5 flex justify-between items-center text-xs mt-3">
                       <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                        ISSUED: {format(new Date(cert.issueDate), 'dd MMM yyyy')}
+                        ISSUED: {safeFormatDate(cert.issueDate, 'dd MMM yyyy')}
                       </span>
                       <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-xs">
                         {cert.certificateId}
@@ -478,8 +473,8 @@ export default function DashboardPage() {
 
             <div className="w-full max-w-xs flex-shrink-0">
               <TactileIdVault
-                studentName={userProfile?.fullName || firstName}
-                studentId={userProfile?.id ? `CC-${userProfile.id.slice(0, 8).toUpperCase()}` : 'CC-2026-8841'}
+                studentName={userProfile?.fullName || firstName || 'Student'}
+                studentId={userProfile?.id ? `CC-${String(userProfile.id).slice(0, 8).toUpperCase()}` : 'CC-2026-8841'}
                 role={userRole}
                 program="CampusConnect Ambassador"
               />
@@ -512,8 +507,8 @@ export default function DashboardPage() {
                   <Link key={event.id} to={`/events/${event.id}`}>
                     <div className="lookap-card p-4 hover:border-purple-400/30 transition-all flex gap-4">
                       <div className="text-center bg-purple-50 dark:bg-purple-950/40 border border-purple-500/20 rounded-xl px-3 py-2 flex-shrink-0 flex flex-col justify-center">
-                        <p className="text-[10px] font-mono uppercase font-bold text-purple-600 dark:text-purple-400">{format(event.date, 'MMM')}</p>
-                        <p className="text-xl font-bold text-purple-700 dark:text-purple-300 leading-none">{format(event.date, 'dd')}</p>
+                        <p className="text-[10px] font-mono uppercase font-bold text-purple-600 dark:text-purple-400">{safeFormatDate(event.date, 'MMM')}</p>
+                        <p className="text-xl font-bold text-purple-700 dark:text-purple-300 leading-none">{safeFormatDate(event.date, 'dd')}</p>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{event.title}</p>
@@ -553,7 +548,7 @@ export default function DashboardPage() {
                     {!a.isRead ? <span className="spec-dot-indigo mt-1.5 flex-shrink-0" /> : <div className="w-2" />}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{a.title}</p>
-                      <p className="text-[11px] font-mono text-slate-400 mt-0.5">{format(a.publishedAt || a.createdAt || Date.now(), 'dd MMM yyyy')}</p>
+                      <p className="text-[11px] font-mono text-slate-400 mt-0.5">{safeFormatDate(a.publishedAt || a.createdAt, 'dd MMM yyyy')}</p>
                     </div>
                     <Badge variant={a.priority === 'urgent' ? 'danger' : a.priority === 'high' ? 'warning' : 'default'} className="text-[10px]">
                       {a.priority}

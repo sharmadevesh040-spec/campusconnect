@@ -39,7 +39,12 @@ export async function getInterviews(studentId?: string): Promise<Interview[]> {
     return mapped
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
-    if (cached) return JSON.parse(cached)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        return Array.isArray(parsed) ? parsed.map(mapInterview) : []
+      } catch {}
+    }
     return []
   }
 }

@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Calendar, Clock, MapPin, Video, Users } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 import { useEvents } from '@/hooks/useEvents'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -72,7 +72,7 @@ export default function EventDetailPage() {
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center"><Calendar className="w-4 h-4 text-blue-500" /></div>
-            <div><p className="text-xs text-slate-400">Date</p><p className="text-sm font-medium text-slate-800 dark:text-slate-200">{format(event.date, 'dd MMM yyyy')}</p></div>
+            <div><p className="text-xs text-slate-400">Date</p><p className="text-sm font-medium text-slate-800 dark:text-slate-200">{safeFormatDate(event.date, 'dd MMM yyyy')}</p></div>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center"><Clock className="w-4 h-4 text-blue-500" /></div>

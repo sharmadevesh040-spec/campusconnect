@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarDays, Clock, MapPin, Video, Users, Calendar, Download } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeTime, safeFormatDate } from '@/lib/dateUtils'
 import { useEvents } from '@/hooks/useEvents'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -25,12 +25,12 @@ export default function EventsPage() {
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming')
   const [registering, setRegistering] = useState<string | null>(null)
 
-  const now = new Date()
+  const now = Date.now()
   const filtered = events.filter(e => {
-    if (filter === 'upcoming') return e.date >= now
-    if (filter === 'past') return e.date < now
+    if (filter === 'upcoming') return safeTime(e.date) >= now
+    if (filter === 'past') return safeTime(e.date) < now
     return true
-  }).sort((a, b) => filter === 'past' ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime())
+  }).sort((a, b) => filter === 'past' ? safeTime(b.date) - safeTime(a.date) : safeTime(a.date) - safeTime(b.date))
 
   const handleRegister = async (eventId: string, eventTitle: string) => {
     setRegistering(eventId)
@@ -68,7 +68,7 @@ export default function EventsPage() {
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in">
       <div>
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Events</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{events.filter(e => e.date >= now).length} upcoming events</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{events.filter(e => safeTime(e.date) >= now).length} upcoming events</p>
       </div>
 
       <div className="flex gap-2">
@@ -102,8 +102,8 @@ export default function EventsPage() {
                 <div className="p-5">
                   <div className="flex items-start gap-4">
                     <div className="text-center bg-blue-50 dark:bg-blue-900/20 rounded-xl px-3 py-2 flex-shrink-0">
-                      <p className="text-xs font-medium text-blue-500">{format(event.date, 'MMM')}</p>
-                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{format(event.date, 'dd')}</p>
+                      <p className="text-xs font-medium text-blue-500">{safeFormatDate(event.date, 'MMM')}</p>
+                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{safeFormatDate(event.date, 'dd')}</p>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">

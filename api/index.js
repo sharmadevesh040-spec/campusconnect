@@ -405,7 +405,56 @@ var FallbackStore = class {
       this.save();
       return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
     }
+    if (lower.includes("from certificates")) {
+      let certs = this.data.certificates;
+      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
+      if (lower.includes("where c.student_id") || lower.includes("where student_id")) {
+        certs = certs.filter((c) => {
+          const sid = String(c.student_id || "").toLowerCase();
+          const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === sid);
+          const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id?.toLowerCase() === sid);
+          return sid === param0 || stu && (stu.id.toLowerCase() === param0 || stu.email.toLowerCase() === param0) || prof && (prof.user_id.toLowerCase() === param0 || prof.student_id?.toLowerCase() === param0);
+        });
+      }
+      if (lower.includes("where c.id") || lower.includes("where id =")) {
+        certs = certs.filter((c) => String(c.id).toLowerCase() === param0 || String(c.certificate_id).toLowerCase() === param0);
+      }
+      const combined = certs.map((c) => {
+        const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === String(c.student_id).toLowerCase()) || {};
+        const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id === c.student_id || p.user_id === stu.id) || {};
+        return {
+          ...c,
+          title: c.title || c.certificate_name,
+          certificate_name: c.certificate_name || c.title,
+          type: c.type || c.certificate_type || "Ambassador",
+          certificate_type: c.certificate_type || c.type || "Ambassador",
+          file_key: c.file_key || c.storage_key,
+          storage_key: c.storage_key || c.file_key,
+          studentName: prof.full_name || "Student Recipient",
+          studentEmail: stu.email || "",
+          studentCode: prof.student_id || "GSA-2026-001",
+          studentUniversity: prof.university || "CampusConnect Ambassador Network"
+        };
+      });
+      return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
+    }
     if (lower.includes("from users")) {
+      if (lower.includes("to_char") || lower.includes("group by") && lower.includes("month")) {
+        const monthCounts = {};
+        const students = this.data.users.filter((u) => u.role === "student");
+        if (students.length === 0) {
+          const nowStr = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { month: "short" });
+          monthCounts[nowStr] = 0;
+        } else {
+          for (const u of students) {
+            const d = new Date(u.created_at || Date.now());
+            const m = d.toLocaleDateString("en-US", { month: "short" });
+            monthCounts[m] = (monthCounts[m] || 0) + 1;
+          }
+        }
+        const rows = Object.entries(monthCounts).map(([month, count]) => ({ month, count }));
+        return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
+      }
       const emailParam = params[0]?.toLowerCase().trim();
       let matches = this.data.users;
       if (emailParam) {
@@ -477,42 +526,13 @@ var FallbackStore = class {
       this.save();
       return { rows: [newCert], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.includes("from certificates")) {
-      let certs = this.data.certificates;
-      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
-      if (lower.includes("where c.student_id") || lower.includes("where student_id")) {
-        certs = certs.filter((c) => {
-          const sid = String(c.student_id || "").toLowerCase();
-          const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === sid);
-          const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id?.toLowerCase() === sid);
-          return sid === param0 || stu && (stu.id.toLowerCase() === param0 || stu.email.toLowerCase() === param0) || prof && (prof.user_id.toLowerCase() === param0 || prof.student_id?.toLowerCase() === param0);
-        });
-      }
-      if (lower.includes("where c.id") || lower.includes("where id =")) {
-        certs = certs.filter((c) => String(c.id).toLowerCase() === param0 || String(c.certificate_id).toLowerCase() === param0);
-      }
-      const combined = certs.map((c) => {
-        const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === String(c.student_id).toLowerCase()) || {};
-        const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id === c.student_id || p.user_id === stu.id) || {};
-        return {
-          ...c,
-          title: c.title || c.certificate_name,
-          certificate_name: c.certificate_name || c.title,
-          type: c.type || c.certificate_type || "Ambassador",
-          certificate_type: c.certificate_type || c.type || "Ambassador",
-          file_key: c.file_key || c.storage_key,
-          storage_key: c.storage_key || c.file_key,
-          studentName: prof.full_name || "Student Recipient",
-          studentEmail: stu.email || "",
-          studentCode: prof.student_id || "GSA-2026-001",
-          studentUniversity: prof.university || "CampusConnect Ambassador Network"
-        };
-      });
-      return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
-    }
     for (const table of Object.keys(this.data)) {
       if (lower.startsWith(`select * from ${table}`) || lower.includes(`from ${table}`)) {
         let rows = [...this.data[table]];
+        if (params.length > 0 && (lower.includes("where student_id =") || lower.includes("where student_id="))) {
+          const sid = String(params[0]).toLowerCase();
+          rows = rows.filter((r) => String(r.student_id || "").toLowerCase() === sid);
+        }
         return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
       }
     }

@@ -44,6 +44,7 @@ import LandingPage from '@/pages/public/LandingPage'
 
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { LookapScrollManager } from '@/components/common/LookapScrollManager'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { UserRole } from '@/types/user'
 
 export const AUTHORIZED_ADMIN_EMAIL = 'sharmadevesh040@gmail.com'
@@ -89,7 +90,7 @@ export default function App() {
   }, [theme])
 
   return (
-    <>
+    <ErrorBoundary fallbackTitle="CampusConnect Display Recovery">
       <LookapScrollManager />
       <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -162,6 +163,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-    </>
+    </ErrorBoundary>
   )
 }

@@ -39,7 +39,7 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
   const [regPassword, setRegPassword] = useState('')
   const [regConfirmPassword, setRegConfirmPassword] = useState('')
 
-  const { login, register: authRegister } = useAuth()
+  const { login, loginWithSession, register: authRegister } = useAuth()
   const navigate = useNavigate()
 
   // Track card container size for responsive spotlight aim
@@ -185,14 +185,20 @@ export default function SpotlightAuthForm({ initialMode = 'login' }: SpotlightAu
         body: JSON.stringify({ email: otpEmail.trim(), otp: otpCode.trim() })
       })
 
-      if (res.token) {
-        setToken(res.token)
+      if (res.token && res.user) {
+        loginWithSession(res.token, res.user)
         toast.success(res.message || 'Authenticated successfully!')
-        if (res.user?.role === 'admin' || res.user?.role === 'super_admin') {
+        const email = (res.user?.email || otpEmail).toLowerCase().trim()
+        const role = res.user?.role
+        if (email === AUTHORIZED_ADMIN_EMAIL.toLowerCase() || role === 'admin' || role === 'super_admin' || role === UserRole.ADMIN) {
           navigate('/admin/dashboard')
         } else {
           navigate('/student/dashboard')
         }
+      } else if (res.token) {
+        setToken(res.token)
+        toast.success(res.message || 'Authenticated successfully!')
+        navigate('/student/dashboard')
       }
     } catch (err: any) {
       toast.error('Passcode verification failed', { description: err.message })

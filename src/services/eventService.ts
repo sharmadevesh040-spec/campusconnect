@@ -35,7 +35,12 @@ export async function getEvents(): Promise<Event[]> {
     return mapped
   } catch {
     const cached = localStorage.getItem(CACHE_KEY)
-    if (cached) return JSON.parse(cached)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        return Array.isArray(parsed) ? parsed.map(mapEvent) : []
+      } catch {}
+    }
     return []
   }
 }

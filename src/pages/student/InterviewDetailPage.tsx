@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Calendar, Clock, Video, MapPin, User, MessageSquare, Sparkles, Download } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeTime, safeFormatDate, safeDate } from '@/lib/dateUtils'
 import { useInterviews } from '@/hooks/useInterviews'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -31,11 +31,11 @@ export default function InterviewDetailPage() {
     </div>
   )
 
-  const interviewDateTime = new Date(interview.date)
-  const isUpcoming = interviewDateTime > new Date() && [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED].includes(interview.status)
+  const interviewDateTime = safeDate(interview.date)
+  const isUpcoming = safeTime(interview.date) > Date.now() && [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED].includes(interview.status)
 
   const addToCalendar = () => {
-    const end = new Date(interviewDateTime.getTime() + (interview.duration || 60) * 60000)
+    const end = new Date(safeTime(interviewDateTime) + (interview.duration || 60) * 60000)
     const interviewTitle = interview.title || interview.programName || 'Interview'
     const ics = createICSEvent({
       title: interviewTitle,
@@ -80,7 +80,7 @@ export default function InterviewDetailPage() {
             <div className="w-9 h-9 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center"><Calendar className="w-4 h-4 text-blue-500" /></div>
             <div>
               <p className="text-xs text-slate-400">Date</p>
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{format(interview.date, 'dd MMM yyyy')}</p>
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{safeFormatDate(interview.date, 'dd MMM yyyy')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">

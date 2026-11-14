@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Award, Download, ExternalLink, Share2, Shield, Eye, QrCode, ShieldCheck, Sparkles } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeFormatDate } from '@/lib/dateUtils'
 import { useCertificates } from '@/hooks/useCertificates'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -137,7 +137,7 @@ export default function CertificatesPage() {
                     <div>
                       <p className="text-[11px] font-mono uppercase text-zinc-500">Issue Date</p>
                       <p className="font-medium text-zinc-300">
-                        {format(new Date(cert.issueDate), 'dd MMMM yyyy')}
+                        {safeFormatDate(cert.issueDate, 'dd MMMM yyyy')}
                       </p>
                     </div>
                     <div className="text-right">

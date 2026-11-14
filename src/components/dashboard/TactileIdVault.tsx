@@ -57,7 +57,7 @@ export function TactileIdVault({
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center font-bold text-xs ring-1 ring-white/30">
-                  {studentName.charAt(0)}
+                  {(studentName || 'Student').charAt(0)}
                 </div>
                 <div>
                   <h4 className="font-bold text-xs tracking-tight leading-tight">{studentName}</h4>

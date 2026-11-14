@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Mic2, Calendar, Clock, Video, MapPin } from 'lucide-react'
-import { format } from 'date-fns'
+import { safeTime, safeFormatDate } from '@/lib/dateUtils'
 import { useInterviews } from '@/hooks/useInterviews'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -22,12 +22,13 @@ export default function InterviewsPage() {
   const { interviews, loading } = useInterviews()
   const [filter, setFilter] = useState('all')
 
+  const now = Date.now()
   const filtered = interviews.filter(i => {
-    if (filter === 'upcoming') return [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED, InterviewStatus.RESCHEDULED].includes(i.status) && i.date > new Date()
+    if (filter === 'upcoming') return [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED, InterviewStatus.RESCHEDULED].includes(i.status) && safeTime(i.date) > now
     if (filter === 'completed') return i.status === InterviewStatus.COMPLETED || i.status === InterviewStatus.SELECTED || i.status === InterviewStatus.REJECTED
     if (filter === 'cancelled') return i.status === InterviewStatus.CANCELLED
     return true
-  }).sort((a, b) => b.date.getTime() - a.date.getTime())
+  }).sort((a, b) => safeTime(b.date) - safeTime(a.date))
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in">
@@ -65,8 +66,8 @@ export default function InterviewsPage() {
                 <Card hover className="p-5">
                   <div className="flex items-start gap-4">
                     <div className="text-center bg-blue-50 dark:bg-blue-900/20 rounded-xl px-3 py-2 flex-shrink-0 min-w-[3.5rem]">
-                      <p className="text-xs font-medium text-blue-500">{format(interview.date, 'MMM')}</p>
-                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{format(interview.date, 'dd')}</p>
+                      <p className="text-xs font-medium text-blue-500">{safeFormatDate(interview.date, 'MMM')}</p>
+                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{safeFormatDate(interview.date, 'dd')}</p>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
