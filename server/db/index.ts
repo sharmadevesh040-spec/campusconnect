@@ -74,6 +74,14 @@ class FallbackStore {
         role: 'student',
         is_verified: true,
         created_at: new Date()
+      },
+      {
+        id: 'u-khushi-kanu',
+        email: 'khushi.kanu123@gmail.com',
+        password_hash: '$2b$10$ehrwGz.OaKhziGBL1Zih0Or303KmJZEF2yydL6GRrexwcxOtUwUb.', // PAPA@123
+        role: 'student',
+        is_verified: true,
+        created_at: new Date()
       }
     ],
     profiles: [
@@ -130,18 +138,107 @@ class FallbackStore {
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Amit+Kumar',
         completion_pct: 90,
         is_active: true
+      },
+      {
+        id: 'prof-khushi',
+        user_id: 'u-khushi-kanu',
+        full_name: 'Khushi Kanu',
+        student_id: 'GSA-2026-915963',
+        phone: '+91 9876543210',
+        university: 'Galgotias University',
+        college: 'School of Computing Science and Engineering',
+        course: 'B.Tech',
+        branch: 'Computer Science',
+        year: 2,
+        semester: 4,
+        skills: ['Student Ambassador', 'Python', 'Web Development', 'Community Leadership'],
+        bio: 'Campus Ambassador & Tech Enthusiast',
+        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu',
+        completion_pct: 90,
+        is_active: true
       }
     ],
     email_tokens: [],
-    certificates: [],
+    certificates: [
+      {
+        id: 'cert-khushi-001',
+        certificate_id: 'CERT-2026-KK670',
+        student_id: 'u-khushi-kanu',
+        title: 'Google Student Ambassador Certificate',
+        certificate_name: 'Google Student Ambassador Certificate',
+        type: 'Ambassador',
+        program: 'Google Student Ambassador Program 2026',
+        issue_date: '2026-11-14',
+        description: 'Awarded for outstanding leadership, active campus engagement, and peer mentorship in the student ambassador community.',
+        file_path: 'uploads/certificates/GSA-2026-915963/CERT-2026-KK670.pdf',
+        file_key: 'certificates/GSA-2026-915963/CERT-2026-KK670.pdf',
+        file_url: '/api/student/certificates/CERT-2026-KK670/download',
+        status: 'Valid',
+        created_at: new Date()
+      }
+    ],
     interviews: [],
-    events: [],
+    events: [
+      {
+        id: 'evt-101',
+        title: 'Annual Campus Ambassador Tech Summit 2026',
+        description: 'Join ambassadors across university campuses for keynotes, workshops, and AI project showcases.',
+        date: '2026-11-20',
+        time: '10:00 AM - 04:00 PM',
+        venue: 'Auditorium Hall A & Online Stream',
+        meeting_link: 'https://campusconnect.live/summit-2026',
+        max_participants: 250,
+        organizer: 'CampusConnect Steering Committee',
+        registration_deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        status: 'Open',
+        registered_count: 142
+      },
+      {
+        id: 'evt-102',
+        title: 'Cloud Architecture & AI Ethics Masterclass',
+        description: 'Hands-on practical session covering scalable cloud deployment and ethical guidelines for generative AI tools.',
+        date: '2026-11-25',
+        time: '02:00 PM - 05:00 PM',
+        venue: 'Virtual Innovation Lab',
+        meeting_link: 'https://campusconnect.live/cloud-masterclass',
+        max_participants: 150,
+        organizer: 'Cloud Mentorship Initiative',
+        registration_deadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+        status: 'Open',
+        registered_count: 89
+      }
+    ],
     event_registrations: [],
     tasks: [],
     announcements: [],
     notifications: [],
     audit_logs: [],
-    resources: []
+    resources: [
+      {
+        id: 'res-101',
+        title: 'STAR Method Interview Guide & Framework',
+        description: 'Master behavioral and leadership questions with structured Situation, Task, Action, Result frameworks.',
+        category: 'Interview Preparation',
+        type: 'PDF',
+        url: 'https://example.com/star-guide.pdf'
+      },
+      {
+        id: 'res-102',
+        title: 'Technical Resume & Portfolio Template (2026)',
+        description: 'ATS-optimized LaTeX and Markdown engineering resume templates tailored for top tech campus roles.',
+        category: 'Resume & Portfolio',
+        type: 'Template',
+        url: 'https://example.com/resume-template'
+      },
+      {
+        id: 'res-103',
+        title: 'Cloud Architecture Cheatsheet & Diagramming Kit',
+        description: 'Comprehensive quick-reference guide covering serverless compute, microservices, and storage patterns.',
+        category: 'Technical Guides',
+        type: 'Guide',
+        url: 'https://example.com/cloud-cheatsheet'
+      }
+    ]
   }
 
   private storePath = path.join(os.tmpdir(), 'campusconnect_fallback_store.json')
