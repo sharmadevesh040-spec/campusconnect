@@ -142,28 +142,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       confirmPassword: password
     }
 
-    const res = await apiRequest<{ token: string; user: any; verificationCode?: string }>('/api/auth/register', {
+    const res = await apiRequest<{ message: string; email?: string; requiresVerification?: boolean }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload)
     })
 
-    if (res.token && res.user) {
-      setToken(res.token)
-      const u = res.user
-      const prof = mapProfile(u)
-
-      setCurrentUser({
-        uid: u.id,
-        email: u.email,
-        displayName: prof.fullName,
-        photoURL: prof.photoURL
-      })
-      setUserProfile(prof)
-      setRole(UserRole.STUDENT)
-      return res
-    } else {
-      throw new Error('Registration failed')
-    }
+    // Do NOT set token or current user here!
+    // The student MUST verify the 6-digit OTP code before getting an authenticated session.
+    return res
   }
 
   const logout = async () => {

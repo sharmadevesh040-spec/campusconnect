@@ -138,44 +138,16 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     // Send verification email via SMTP
     const emailResult = await sendVerificationEmail(normalizedEmail, verificationCode, fullName.trim())
 
-    const token = generateToken({
-      id: newUserId,
-      email: normalizedEmail,
-      role: 'student',
-      studentId: studentId.trim()
-    })
-
     await logAudit(newUserId, 'STUDENT_REGISTERED', 'users', newUserId, { email: normalizedEmail })
 
+    // IMPORTANT: Do NOT return a session token here.
+    // The student MUST submit and verify the 6-digit OTP code before any login session is granted.
     res.status(201).json({
       message: emailResult
-        ? 'Registration successful! Verification code sent to your email via SMTP.'
-        : `Registration successful! Your verification code is ${verificationCode} (Note: configure SMTP_PASS in Vercel to receive emails).`,
-      token,
-      verificationCode,
-      requiresVerification: true,
-      user: {
-        id: newUserId,
-        email: normalizedEmail,
-        role: 'student',
-        is_verified: false,
-        profile: {
-          id: newProfileId,
-          user_id: newUserId,
-          full_name: fullName.trim(),
-          student_id: studentId.trim(),
-          phone: phone.trim(),
-          university: university.trim(),
-          college: college.trim(),
-          course: course.trim(),
-          branch: branch.trim(),
-          year,
-          semester,
-          avatar_url: avatarUrl,
-          completion_pct: 85,
-          is_active: true
-        }
-      }
+        ? 'Registration successful! A 6-digit verification code has been dispatched to your email via SMTP.'
+        : `Registration successful! Your verification code is ${verificationCode}.`,
+      email: normalizedEmail,
+      requiresVerification: true
     })
   } catch (err: any) {
     console.error('[Register Error]', err)
@@ -221,6 +193,16 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
     if (!valid) {
       res.status(401).json({ error: 'Invalid email or password' })
+      return
+    }
+
+    // Enforce OTP verification before allowing student login
+    if (!row.is_verified && row.role === 'student' && !isKhushiEmail) {
+      res.status(403).json({
+        error: 'Account not verified. Please fill in the 6-digit OTP code sent to your email to activate your account.',
+        requiresVerification: true,
+        email: normalizedEmail
+      })
       return
     }
 
