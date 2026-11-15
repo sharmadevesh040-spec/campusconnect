@@ -371,7 +371,24 @@ var FallbackStore = class {
       }
     ],
     interviews: [],
-    events: [],
+    events: [
+      {
+        id: "evt-game-on-night-2026",
+        title: "Month's Brief \u2014 Game On Night : Imagine The Impossible",
+        description: "Official Monthly Ambassador Briefing & Community Gathering. Theme: Game On Night : Imagine The Impossible. Join the interactive session to discuss upcoming campus initiatives, interactive workshops, and Google Gemini challenges.",
+        date: "2026-11-20",
+        time: "8:00 PM",
+        venue: "Google Meet (Virtual)",
+        meeting_link: "https://meet.google.com/uur-rgbb-fgi",
+        max_participants: 500,
+        banner_url: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&auto=format&fit=crop&q=80",
+        organizer: "Campus Ambassador Lead",
+        registration_deadline: "2026-11-20T19:30:00.000Z",
+        status: "Open",
+        created_at: /* @__PURE__ */ new Date(),
+        updated_at: /* @__PURE__ */ new Date()
+      }
+    ],
     event_registrations: [],
     tasks: [],
     announcements: [],
@@ -890,6 +907,47 @@ var FallbackStore = class {
       this.save();
       return { rows: [newLog], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
+    if (lower.includes("from events")) {
+      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
+        return { rows: [{ count: (this.data.events || []).length }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+      }
+      const studentId = params[0] ? String(params[0]).trim() : null;
+      const mappedEvents = (this.data.events || []).map((e) => {
+        const regs = (this.data.event_registrations || []).filter((r) => r.event_id === e.id && r.status === "Registered");
+        const isRegistered = studentId ? (this.data.event_registrations || []).some((r) => r.event_id === e.id && r.student_id === studentId && r.status === "Registered") : false;
+        return {
+          ...e,
+          meeting_link: e.meeting_link || e.meetingLink,
+          meetingLink: e.meeting_link || e.meetingLink,
+          banner_url: e.banner_url || e.bannerURL,
+          bannerURL: e.banner_url || e.bannerURL,
+          max_participants: e.max_participants || 100,
+          maxCapacity: e.max_participants || 100,
+          attendeeCount: regs.length,
+          registeredCount: regs.length,
+          isRegistered
+        };
+      });
+      return { rows: mappedEvents, command: "SELECT", rowCount: mappedEvents.length, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("insert into event_registrations")) {
+      const [event_id, student_id] = params;
+      this.data.event_registrations = this.data.event_registrations || [];
+      const existing = this.data.event_registrations.find((r) => r.event_id === event_id && r.student_id === student_id);
+      if (existing) {
+        existing.status = "Registered";
+      } else {
+        this.data.event_registrations.push({
+          id: "reg-" + Date.now(),
+          event_id,
+          student_id,
+          status: "Registered",
+          registered_at: /* @__PURE__ */ new Date()
+        });
+      }
+      this.save();
+      return { rows: [], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+    }
     for (const table of Object.keys(this.data)) {
       if (lower.startsWith(`select * from ${table}`) || lower.includes(`from ${table}`)) {
         let rows = [...this.data[table]];
@@ -1000,7 +1058,22 @@ async function seedDatabase() {
   ];
   const defaultInterviews = [];
   const defaultCertificates = [];
-  const defaultEvents = [];
+  const defaultEvents = [
+    {
+      id: "evt-game-on-night-2026",
+      title: "Month's Brief \u2014 Game On Night : Imagine The Impossible",
+      description: "Official Monthly Ambassador Briefing & Community Gathering. Theme: Game On Night : Imagine The Impossible. Join the interactive session to discuss upcoming campus initiatives, interactive workshops, and Google Gemini challenges.",
+      date: "2026-11-20",
+      time: "8:00 PM",
+      venue: "Google Meet (Virtual)",
+      meeting_link: "https://meet.google.com/uur-rgbb-fgi",
+      max_participants: 500,
+      banner_url: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&auto=format&fit=crop&q=80",
+      organizer: "Campus Ambassador Lead",
+      registration_deadline: "2026-11-20T19:30:00.000Z",
+      status: "Open"
+    }
+  ];
   const defaultTasks = [];
   const defaultAnnouncements = [];
   const defaultResources = [
@@ -1018,6 +1091,12 @@ async function seedDatabase() {
     if (idx === -1) {
       fallbackStore.data.users.push(u);
       fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: "prof-" + u.id });
+    }
+  }
+  for (const e of defaultEvents) {
+    const idx = fallbackStore.data.events.findIndex((existing) => existing.id === e.id);
+    if (idx === -1) {
+      fallbackStore.data.events.push({ ...e, created_at: /* @__PURE__ */ new Date(), updated_at: /* @__PURE__ */ new Date() });
     }
   }
   for (const r of defaultResources) {

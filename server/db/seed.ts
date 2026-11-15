@@ -60,7 +60,22 @@ export async function seedDatabase() {
 
   const defaultInterviews: any[] = []
   const defaultCertificates: any[] = []
-  const defaultEvents: any[] = []
+  const defaultEvents = [
+    {
+      id: 'evt-game-on-night-2026',
+      title: "Month's Brief — Game On Night : Imagine The Impossible",
+      description: 'Official Monthly Ambassador Briefing & Community Gathering. Theme: Game On Night : Imagine The Impossible. Join the interactive session to discuss upcoming campus initiatives, interactive workshops, and Google Gemini challenges.',
+      date: '2026-11-20',
+      time: '8:00 PM',
+      venue: 'Google Meet (Virtual)',
+      meeting_link: 'https://meet.google.com/uur-rgbb-fgi',
+      max_participants: 500,
+      banner_url: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&auto=format&fit=crop&q=80',
+      organizer: 'Campus Ambassador Lead',
+      registration_deadline: '2026-11-20T19:30:00.000Z',
+      status: 'Open'
+    }
+  ]
   const defaultTasks: any[] = []
   const defaultAnnouncements: any[] = []
   const defaultResources = [
@@ -80,6 +95,13 @@ export async function seedDatabase() {
     if (idx === -1) {
       fallbackStore.data.users.push(u)
       fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: 'prof-' + u.id })
+    }
+  }
+
+  for (const e of defaultEvents) {
+    const idx = fallbackStore.data.events.findIndex(existing => existing.id === e.id)
+    if (idx === -1) {
+      fallbackStore.data.events.push({ ...e, created_at: new Date(), updated_at: new Date() })
     }
   }
 

@@ -153,7 +153,24 @@ class FallbackStore {
       }
     ],
     interviews: [],
-    events: [],
+    events: [
+      {
+        id: 'evt-game-on-night-2026',
+        title: "Month's Brief — Game On Night : Imagine The Impossible",
+        description: 'Official Monthly Ambassador Briefing & Community Gathering. Theme: Game On Night : Imagine The Impossible. Join the interactive session to discuss upcoming campus initiatives, interactive workshops, and Google Gemini challenges.',
+        date: '2026-11-20',
+        time: '8:00 PM',
+        venue: 'Google Meet (Virtual)',
+        meeting_link: 'https://meet.google.com/uur-rgbb-fgi',
+        max_participants: 500,
+        banner_url: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&auto=format&fit=crop&q=80',
+        organizer: 'Campus Ambassador Lead',
+        registration_deadline: '2026-11-20T19:30:00.000Z',
+        status: 'Open',
+        created_at: new Date(),
+        updated_at: new Date()
+      }
+    ],
     event_registrations: [],
     tasks: [],
     announcements: [],
@@ -740,6 +757,51 @@ class FallbackStore {
       this.data.audit_logs.push(newLog)
       this.save()
       return { rows: [newLog], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    // 13b. SELECT FROM events
+    if (lower.includes('from events')) {
+      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
+        return { rows: [{ count: (this.data.events || []).length }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
+      const studentId = params[0] ? String(params[0]).trim() : null
+      const mappedEvents = (this.data.events || []).map(e => {
+        const regs = (this.data.event_registrations || []).filter(r => r.event_id === e.id && r.status === 'Registered')
+        const isRegistered = studentId ? (this.data.event_registrations || []).some(r => r.event_id === e.id && r.student_id === studentId && r.status === 'Registered') : false
+        return {
+          ...e,
+          meeting_link: e.meeting_link || e.meetingLink,
+          meetingLink: e.meeting_link || e.meetingLink,
+          banner_url: e.banner_url || e.bannerURL,
+          bannerURL: e.banner_url || e.bannerURL,
+          max_participants: e.max_participants || 100,
+          maxCapacity: e.max_participants || 100,
+          attendeeCount: regs.length,
+          registeredCount: regs.length,
+          isRegistered
+        }
+      })
+      return { rows: mappedEvents, command: 'SELECT', rowCount: mappedEvents.length, oid: 0, fields: [] }
+    }
+
+    // 13c. INSERT INTO event_registrations
+    if (lower.startsWith('insert into event_registrations')) {
+      const [event_id, student_id] = params
+      this.data.event_registrations = this.data.event_registrations || []
+      const existing = this.data.event_registrations.find(r => r.event_id === event_id && r.student_id === student_id)
+      if (existing) {
+        existing.status = 'Registered'
+      } else {
+        this.data.event_registrations.push({
+          id: 'reg-' + Date.now(),
+          event_id,
+          student_id,
+          status: 'Registered',
+          registered_at: new Date()
+        })
+      }
+      this.save()
+      return { rows: [], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
 
     // 14. Generic SELECT
