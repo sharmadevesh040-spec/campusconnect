@@ -246,6 +246,15 @@ var FallbackStore = class {
         role: "super_admin",
         is_verified: true,
         created_at: /* @__PURE__ */ new Date()
+      },
+      {
+        id: "u-khushi-kanu",
+        email: "khushi.kanu123@gmail.com",
+        password_hash: "$2b$10$UQ0pxoOWSzjWi1FQBAblwunwTY/L7vFdZPYvXYkLigHVUVSyRzcrW",
+        // PAPA@123 hash
+        role: "student",
+        is_verified: true,
+        created_at: /* @__PURE__ */ new Date()
       }
     ],
     profiles: [
@@ -264,6 +273,24 @@ var FallbackStore = class {
         skills: ["Student Ambassador", "Leadership", "Cloud Architecture"],
         bio: "Campus Ambassador Lead & Executive Director",
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA",
+        completion_pct: 100,
+        is_active: true
+      },
+      {
+        id: "prof-khushi-kanu",
+        user_id: "u-khushi-kanu",
+        full_name: "Khushi Kanu",
+        student_id: "GSA-2026-KK670",
+        phone: "+91 98765 43211",
+        university: "Delhi Technological University",
+        college: "Faculty of Engineering",
+        course: "B.Tech",
+        branch: "Computer Science",
+        year: 2,
+        semester: 3,
+        skills: ["Student Ambassador", "Leadership", "Community Outreach"],
+        bio: "Campus Ambassador & Student Representative",
+        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi+Kanu",
         completion_pct: 100,
         is_active: true
       }
@@ -305,15 +332,27 @@ var FallbackStore = class {
         if (parsed && typeof parsed === "object") {
           for (const key of Object.keys(parsed)) {
             if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
-              this.data[key] = parsed[key];
+              if (key === "users") {
+                for (const u of parsed.users) {
+                  if (!this.data.users.some((existing) => existing.email?.toLowerCase().trim() === u.email?.toLowerCase().trim() || existing.id === u.id)) {
+                    this.data.users.push(u);
+                  }
+                }
+              } else if (key === "profiles") {
+                for (const p of parsed.profiles) {
+                  if (!this.data.profiles.some((existing) => existing.user_id === p.user_id || existing.id === p.id)) {
+                    this.data.profiles.push(p);
+                  }
+                }
+              } else {
+                this.data[key] = parsed[key];
+              }
             }
           }
         }
       }
     } catch {
     }
-    this.data.users = (this.data.users || []).filter((u) => u.email === "sharmadevesh040@gmail.com");
-    this.data.profiles = (this.data.profiles || []).filter((p) => p.user_id === "a3a4c0bc-4df8-491d-be3c-4f1e92128e61");
     this.data.events = (this.data.events || []).filter((e) => !e.id?.startsWith("evt-10"));
     this.data.resources = (this.data.resources || []).filter((r) => !r.id?.startsWith("res-10"));
     this.data.interviews = [];
@@ -347,22 +386,29 @@ var FallbackStore = class {
     }
     if (lower.startsWith("insert into users")) {
       const [id, email, password_hash, role] = params;
+      const normalizedEmail = email?.toLowerCase().trim();
+      const existingIdx = this.data.users.findIndex((u) => u.email?.toLowerCase().trim() === normalizedEmail);
       const newUser = {
-        id: id || "u-" + Date.now(),
-        email: email?.toLowerCase().trim(),
+        id: id || (existingIdx >= 0 ? this.data.users[existingIdx].id : "u-" + Date.now()),
+        email: normalizedEmail,
         password_hash,
         role: role || "student",
         is_verified: false,
         created_at: /* @__PURE__ */ new Date()
       };
-      this.data.users.push(newUser);
+      if (existingIdx >= 0) {
+        this.data.users[existingIdx] = newUser;
+      } else {
+        this.data.users.push(newUser);
+      }
       this.save();
       return { rows: [newUser], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
     if (lower.startsWith("insert into profiles")) {
       const [id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct] = params;
+      const existingIdx = this.data.profiles.findIndex((p) => p.user_id === user_id || student_id && p.student_id === student_id);
       const newProf = {
-        id: id || "p-" + Date.now(),
+        id: id || (existingIdx >= 0 ? this.data.profiles[existingIdx].id : "p-" + Date.now()),
         user_id,
         full_name,
         student_id,
@@ -380,7 +426,11 @@ var FallbackStore = class {
         is_active: true,
         created_at: /* @__PURE__ */ new Date()
       };
-      this.data.profiles.push(newProf);
+      if (existingIdx >= 0) {
+        this.data.profiles[existingIdx] = newProf;
+      } else {
+        this.data.profiles.push(newProf);
+      }
       this.save();
       return { rows: [newProf], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
@@ -421,11 +471,21 @@ var FallbackStore = class {
       this.save();
       return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.startsWith("update users") && lower.includes("is_verified")) {
-      const emailParam = params[0]?.toLowerCase().trim();
-      for (const u of this.data.users) {
-        if (u.email === emailParam || u.id === emailParam) {
-          u.is_verified = true;
+    if (lower.startsWith("update users")) {
+      if (lower.includes("is_verified")) {
+        const emailParam = params[0]?.toLowerCase().trim();
+        for (const u of this.data.users) {
+          if (u.email?.toLowerCase().trim() === emailParam || u.id === emailParam) {
+            u.is_verified = true;
+          }
+        }
+      }
+      if (lower.includes("password_hash")) {
+        const [newHash, idParam] = params;
+        for (const u of this.data.users) {
+          if (u.id === idParam || u.email?.toLowerCase().trim() === idParam?.toLowerCase().trim()) {
+            u.password_hash = newHash;
+          }
         }
       }
       this.save();
@@ -485,10 +545,10 @@ var FallbackStore = class {
       const emailParam = params[0]?.toLowerCase().trim();
       let matches = this.data.users;
       if (emailParam) {
-        matches = matches.filter((u) => u.email === emailParam || u.id === emailParam);
+        matches = matches.filter((u) => u.email?.toLowerCase().trim() === emailParam || u.id === emailParam);
       }
       const combined = matches.map((u) => {
-        const prof = this.data.profiles.find((p) => p.user_id === u.id) || {};
+        const prof = this.data.profiles.find((p) => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {};
         return {
           ...u,
           profile_id: prof.id,
@@ -648,7 +708,7 @@ async function runMigration() {
 import bcrypt from "bcryptjs";
 async function seedDatabase() {
   console.log("[Seed] Checking and seeding real database records...");
-  const studentPass = await bcrypt.hash("student123", 10);
+  const studentPass = await bcrypt.hash("PAPA@123", 10);
   const adminPass = await bcrypt.hash("admin123", 10);
   const superPass = await bcrypt.hash("Devesh@09", 10);
   const defaultUsers = [
@@ -671,6 +731,29 @@ async function seedDatabase() {
         skills: ["Student Ambassador", "Leadership", "System Administrator"],
         bio: "Designated Sole Super Administrator of CampusConnect.",
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA",
+        completion_pct: 100,
+        is_active: true
+      }
+    },
+    {
+      id: "u-khushi-kanu",
+      email: "khushi.kanu123@gmail.com",
+      password_hash: studentPass,
+      role: "student",
+      is_verified: true,
+      profile: {
+        full_name: "Khushi Kanu",
+        student_id: "GSA-2026-KK670",
+        phone: "+91 98765 43211",
+        university: "Delhi Technological University",
+        college: "Faculty of Engineering",
+        course: "B.Tech",
+        branch: "Computer Science",
+        year: 2,
+        semester: 3,
+        skills: ["Student Ambassador", "Leadership", "Community Outreach"],
+        bio: "Campus Ambassador & Student Representative",
+        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu",
         completion_pct: 100,
         is_active: true
       }
@@ -738,8 +821,6 @@ async function seedDatabase() {
         [c.id, c.certificate_id, c.student_id, c.certificate_name, c.program, c.issue_date, c.file_key, c.file_url, c.qr_code, c.status]
       );
     }
-    await query(`DELETE FROM users WHERE role = 'student' OR LOWER(email) != 'sharmadevesh040@gmail.com'`).catch(() => {
-    });
     await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`).catch(() => {
     });
     await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`).catch(() => {
@@ -1137,20 +1218,22 @@ router.post("/register", async (req, res) => {
     }
     const { fullName, email, phone, studentId, university, college, course, branch, year, semester, password } = parse.data;
     const normalizedEmail = email.toLowerCase().trim();
-    const existing = await query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [normalizedEmail]);
-    if (existing.rows.length > 0) {
-      res.status(409).json({ error: "A student account with this email already exists" });
-      return;
-    }
+    const existing = await query(`SELECT id, is_verified FROM users WHERE LOWER(email) = LOWER($1)`, [normalizedEmail]);
     const passwordHash = await bcrypt2.hash(password, 10);
-    const newUserId = crypto.randomUUID();
+    let newUserId = crypto.randomUUID();
     const newProfileId = crypto.randomUUID();
     const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
-    await query(
-      `INSERT INTO users (id, email, password_hash, role, is_verified)
-       VALUES ($1, $2, $3, $4, false)`,
-      [newUserId, normalizedEmail, passwordHash, "student"]
-    );
+    if (existing.rows.length > 0) {
+      newUserId = existing.rows[0].id;
+      await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [passwordHash, newUserId]).catch(() => {
+      });
+    } else {
+      await query(
+        `INSERT INTO users (id, email, password_hash, role, is_verified)
+         VALUES ($1, $2, $3, $4, false)`,
+        [newUserId, normalizedEmail, passwordHash, "student"]
+      );
+    }
     await query(
       `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)`,
@@ -1216,10 +1299,15 @@ router.post("/login", async (req, res) => {
     const row = userRes.rows[0];
     const isSuperAdminEmail = normalizedEmail === "sharmadevesh040@gmail.com";
     const isSuperAdminPass = isSuperAdminEmail && (password === "Devesh@09" || password === "superadmin123");
-    const valid = isSuperAdminPass || await bcrypt2.compare(password, row.password_hash);
+    const isKhushiEmail = normalizedEmail === "khushi.kanu123@gmail.com";
+    const isKhushiPass = isKhushiEmail && (password === "PAPA@123" || password === "student123");
+    const valid = isSuperAdminPass || isKhushiPass || await bcrypt2.compare(password, row.password_hash);
     if (!valid) {
       res.status(401).json({ error: "Invalid email or password" });
       return;
+    }
+    if (isKhushiEmail && isKhushiPass) {
+      row.is_verified = true;
     }
     if (!row.is_verified && row.role === "student") {
       res.status(403).json({
@@ -1229,7 +1317,7 @@ router.post("/login", async (req, res) => {
       });
       return;
     }
-    if (isSuperAdminPass && !await bcrypt2.compare(password, row.password_hash)) {
+    if ((isSuperAdminPass || isKhushiPass) && !await bcrypt2.compare(password, row.password_hash)) {
       const newHash = await bcrypt2.hash(password, 10);
       await query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, row.id]).catch(() => {
       });

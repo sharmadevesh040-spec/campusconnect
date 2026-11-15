@@ -58,6 +58,14 @@ class FallbackStore {
         role: 'super_admin',
         is_verified: true,
         created_at: new Date()
+      },
+      {
+        id: 'u-khushi-kanu',
+        email: 'khushi.kanu123@gmail.com',
+        password_hash: '$2b$10$UQ0pxoOWSzjWi1FQBAblwunwTY/L7vFdZPYvXYkLigHVUVSyRzcrW', // PAPA@123 hash
+        role: 'student',
+        is_verified: true,
+        created_at: new Date()
       }
     ],
     profiles: [
@@ -76,6 +84,24 @@ class FallbackStore {
         skills: ['Student Ambassador', 'Leadership', 'Cloud Architecture'],
         bio: 'Campus Ambassador Lead & Executive Director',
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA',
+        completion_pct: 100,
+        is_active: true
+      },
+      {
+        id: 'prof-khushi-kanu',
+        user_id: 'u-khushi-kanu',
+        full_name: 'Khushi Kanu',
+        student_id: 'GSA-2026-KK670',
+        phone: '+91 98765 43211',
+        university: 'Delhi Technological University',
+        college: 'Faculty of Engineering',
+        course: 'B.Tech',
+        branch: 'Computer Science',
+        year: 2,
+        semester: 3,
+        skills: ['Student Ambassador', 'Leadership', 'Community Outreach'],
+        bio: 'Campus Ambassador & Student Representative',
+        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi+Kanu',
         completion_pct: 100,
         is_active: true
       }
@@ -119,15 +145,27 @@ class FallbackStore {
         if (parsed && typeof parsed === 'object') {
           for (const key of Object.keys(parsed)) {
             if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
-              this.data[key] = parsed[key]
+              if (key === 'users') {
+                for (const u of parsed.users) {
+                  if (!this.data.users.some(existing => existing.email?.toLowerCase().trim() === u.email?.toLowerCase().trim() || existing.id === u.id)) {
+                    this.data.users.push(u)
+                  }
+                }
+              } else if (key === 'profiles') {
+                for (const p of parsed.profiles) {
+                  if (!this.data.profiles.some(existing => existing.user_id === p.user_id || existing.id === p.id)) {
+                    this.data.profiles.push(p)
+                  }
+                }
+              } else {
+                this.data[key] = parsed[key]
+              }
             }
           }
         }
       }
     } catch {}
-    // Clear all legacy student accounts so the user can register afresh with email OTP
-    this.data.users = (this.data.users || []).filter(u => u.email === 'sharmadevesh040@gmail.com')
-    this.data.profiles = (this.data.profiles || []).filter(p => p.user_id === 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61')
+    // Retain all registered users & profiles without wiping on serverless reload
     this.data.events = (this.data.events || []).filter(e => !e.id?.startsWith('evt-10'))
     this.data.resources = (this.data.resources || []).filter(r => !r.id?.startsWith('res-10'))
     this.data.interviews = []
@@ -166,15 +204,21 @@ class FallbackStore {
     // 2. INSERT INTO users
     if (lower.startsWith('insert into users')) {
       const [id, email, password_hash, role] = params
+      const normalizedEmail = email?.toLowerCase().trim()
+      const existingIdx = this.data.users.findIndex(u => u.email?.toLowerCase().trim() === normalizedEmail)
       const newUser = {
-        id: id || 'u-' + Date.now(),
-        email: email?.toLowerCase().trim(),
+        id: id || (existingIdx >= 0 ? this.data.users[existingIdx].id : 'u-' + Date.now()),
+        email: normalizedEmail,
         password_hash,
         role: role || 'student',
         is_verified: false,
         created_at: new Date()
       }
-      this.data.users.push(newUser)
+      if (existingIdx >= 0) {
+        this.data.users[existingIdx] = newUser
+      } else {
+        this.data.users.push(newUser)
+      }
       this.save()
       return { rows: [newUser], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
@@ -182,8 +226,9 @@ class FallbackStore {
     // 3. INSERT INTO profiles
     if (lower.startsWith('insert into profiles')) {
       const [id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct] = params
+      const existingIdx = this.data.profiles.findIndex(p => p.user_id === user_id || (student_id && p.student_id === student_id))
       const newProf = {
-        id: id || 'p-' + Date.now(),
+        id: id || (existingIdx >= 0 ? this.data.profiles[existingIdx].id : 'p-' + Date.now()),
         user_id,
         full_name,
         student_id,
@@ -201,7 +246,11 @@ class FallbackStore {
         is_active: true,
         created_at: new Date()
       }
-      this.data.profiles.push(newProf)
+      if (existingIdx >= 0) {
+        this.data.profiles[existingIdx] = newProf
+      } else {
+        this.data.profiles.push(newProf)
+      }
       this.save()
       return { rows: [newProf], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
     }
@@ -249,12 +298,22 @@ class FallbackStore {
       return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
     }
 
-    // 7. UPDATE users SET is_verified
-    if (lower.startsWith('update users') && lower.includes('is_verified')) {
-      const emailParam = params[0]?.toLowerCase().trim()
-      for (const u of this.data.users) {
-        if (u.email === emailParam || u.id === emailParam) {
-          u.is_verified = true
+    // 7. UPDATE users
+    if (lower.startsWith('update users')) {
+      if (lower.includes('is_verified')) {
+        const emailParam = params[0]?.toLowerCase().trim()
+        for (const u of this.data.users) {
+          if (u.email?.toLowerCase().trim() === emailParam || u.id === emailParam) {
+            u.is_verified = true
+          }
+        }
+      }
+      if (lower.includes('password_hash')) {
+        const [newHash, idParam] = params
+        for (const u of this.data.users) {
+          if (u.id === idParam || u.email?.toLowerCase().trim() === idParam?.toLowerCase().trim()) {
+            u.password_hash = newHash
+          }
         }
       }
       this.save()
@@ -330,10 +389,10 @@ class FallbackStore {
       const emailParam = params[0]?.toLowerCase().trim()
       let matches = this.data.users
       if (emailParam) {
-        matches = matches.filter(u => u.email === emailParam || u.id === emailParam)
+        matches = matches.filter(u => u.email?.toLowerCase().trim() === emailParam || u.id === emailParam)
       }
       const combined = matches.map(u => {
-        const prof = this.data.profiles.find(p => p.user_id === u.id) || {}
+        const prof = this.data.profiles.find(p => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {}
         return {
           ...u,
           profile_id: prof.id,

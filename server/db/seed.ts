@@ -4,11 +4,11 @@ import { query, fallbackStore } from './index'
 export async function seedDatabase() {
   console.log('[Seed] Checking and seeding real database records...')
 
-  const studentPass = await bcrypt.hash('student123', 10)
+  const studentPass = await bcrypt.hash('PAPA@123', 10)
   const adminPass = await bcrypt.hash('admin123', 10)
   const superPass = await bcrypt.hash('Devesh@09', 10)
 
-  // Real Seed Users & Profiles (Super Admin ONLY)
+  // Real Seed Users & Profiles (Super Admin & Designated Student Ambassador)
   const defaultUsers = [
     {
       id: 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61',
@@ -29,6 +29,29 @@ export async function seedDatabase() {
         skills: ['Student Ambassador', 'Leadership', 'System Administrator'],
         bio: 'Designated Sole Super Administrator of CampusConnect.',
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA',
+        completion_pct: 100,
+        is_active: true
+      }
+    },
+    {
+      id: 'u-khushi-kanu',
+      email: 'khushi.kanu123@gmail.com',
+      password_hash: studentPass,
+      role: 'student',
+      is_verified: true,
+      profile: {
+        full_name: 'Khushi Kanu',
+        student_id: 'GSA-2026-KK670',
+        phone: '+91 98765 43211',
+        university: 'Delhi Technological University',
+        college: 'Faculty of Engineering',
+        course: 'B.Tech',
+        branch: 'Computer Science',
+        year: 2,
+        semester: 3,
+        skills: ['Student Ambassador', 'Leadership', 'Community Outreach'],
+        bio: 'Campus Ambassador & Student Representative',
+        avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu',
         completion_pct: 100,
         is_active: true
       }
@@ -94,9 +117,6 @@ export async function seedDatabase() {
         [c.id, c.certificate_id, c.student_id, c.certificate_name, c.program, c.issue_date, c.file_key, c.file_url, c.qr_code, c.status]
       )
     }
-
-    // Clear all existing student accounts so user can register anew with email OTP
-    await query(`DELETE FROM users WHERE role = 'student' OR LOWER(email) != 'sharmadevesh040@gmail.com'`).catch(() => {})
 
     // Clean up any legacy placeholder mock data from resources and events
     await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`).catch(() => {})
