@@ -440,7 +440,145 @@ class FallbackStore {
       return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
     }
 
-    // 8. SELECT FROM certificates (Prioritized before users to prevent JOIN collisions)
+    // 8. SELECT FROM users / profiles (Prioritized when FROM users is present, even with certificate subqueries)
+    if (lower.includes('from users')) {
+      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
+        const studentCount = this.data.users.filter(u => u.role === 'student').length
+        return { rows: [{ count: studentCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
+
+      // Monthly student enrollment time-series aggregation for Admin Dashboard
+      if (lower.includes('to_char') || (lower.includes('group by') && lower.includes('month'))) {
+        const monthCounts: Record<string, number> = {}
+        const students = this.data.users.filter(u => u.role === 'student')
+        if (students.length === 0) {
+          const nowStr = new Date().toLocaleDateString('en-US', { month: 'short' })
+          monthCounts[nowStr] = 0
+        } else {
+          for (const u of students) {
+            const d = new Date(u.created_at || Date.now())
+            const m = d.toLocaleDateString('en-US', { month: 'short' })
+            monthCounts[m] = (monthCounts[m] || 0) + 1
+          }
+        }
+        const rows = Object.entries(monthCounts).map(([month, count]) => ({ month, count }))
+        return { rows, command: 'SELECT', rowCount: rows.length, oid: 0, fields: [] }
+      }
+
+      const emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null
+      let matches = [...this.data.users]
+      if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'") && !emailParam.startsWith('%')) {
+        matches = matches.filter(u => {
+          const prof = this.data.profiles.find(p => p.user_id === u.id)
+          return u.email?.toLowerCase().trim() === emailParam ||
+                 u.id?.toLowerCase() === emailParam ||
+                 prof?.student_id?.toLowerCase() === emailParam
+        })
+      }
+      if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
+        matches = matches.filter(u => u.role === 'student')
+      }
+
+      // Filter by search term if passed
+      for (const p of params) {
+        if (typeof p === 'string' && p.startsWith('%') && p.endsWith('%')) {
+          const searchVal = p.slice(1, -1).toLowerCase().trim()
+          if (searchVal) {
+            matches = matches.filter(u => {
+              const prof = this.data.profiles.find(pr => pr.user_id === u.id)
+              return (
+                u.email?.toLowerCase().includes(searchVal) ||
+                prof?.full_name?.toLowerCase().includes(searchVal) ||
+                prof?.student_id?.toLowerCase().includes(searchVal)
+              )
+            })
+          }
+        }
+      }
+
+      // Filter by online status
+      if (lower.includes('p.last_active_at >=')) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+        matches = matches.filter(u => {
+          const prof = this.data.profiles.find(pr => pr.user_id === u.id)
+          return prof?.last_active_at && new Date(prof.last_active_at) >= fiveMinutesAgo
+        })
+      }
+
+      // Sorting
+      if (lower.includes('order by p.full_name asc')) {
+        matches.sort((a, b) => {
+          const pa = this.data.profiles.find(p => p.user_id === a.id)?.full_name || ''
+          const pb = this.data.profiles.find(p => p.user_id === b.id)?.full_name || ''
+          return pa.localeCompare(pb)
+        })
+      } else if (lower.includes('order by p.login_count desc')) {
+        matches.sort((a, b) => {
+          const ca = this.data.profiles.find(p => p.user_id === a.id)?.login_count || 0
+          const cb = this.data.profiles.find(p => p.user_id === b.id)?.login_count || 0
+          return cb - ca
+        })
+      } else if (lower.includes('order by p.last_login_at asc')) {
+        matches.sort((a, b) => {
+          const ta = new Date(this.data.profiles.find(p => p.user_id === a.id)?.last_login_at || 0).getTime()
+          const tb = new Date(this.data.profiles.find(p => p.user_id === b.id)?.last_login_at || 0).getTime()
+          return ta - tb
+        })
+      } else {
+        matches.sort((a, b) => {
+          const ta = new Date(this.data.profiles.find(p => p.user_id === a.id)?.last_login_at || 0).getTime()
+          const tb = new Date(this.data.profiles.find(p => p.user_id === b.id)?.last_login_at || 0).getTime()
+          return tb - ta
+        })
+      }
+
+      const combined = matches.map(u => {
+        const prof = this.data.profiles.find(p => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {}
+        return {
+          ...u,
+          id: u.id,
+          email: u.email,
+          createdAt: u.created_at,
+          profileId: prof.id || u.id,
+          profile_id: prof.id || u.id,
+          name: prof.full_name || u.email,
+          full_name: prof.full_name || u.email,
+          studentId: prof.student_id || 'GSA-2026-KK670',
+          student_id: prof.student_id || 'GSA-2026-KK670',
+          phone: prof.phone || '',
+          university: prof.university || 'University',
+          college: prof.college || 'College',
+          course: prof.course || 'B.Tech',
+          branch: prof.branch || 'Computer Science',
+          year: prof.year || 2,
+          semester: prof.semester || 3,
+          skills: prof.skills || ['Ambassador'],
+          bio: prof.bio || '',
+          avatar_url: prof.avatar_url,
+          avatarUrl: prof.avatar_url,
+          completion_pct: prof.completion_pct || 85,
+          completionPct: prof.completion_pct || 85,
+          is_active: prof.is_active ?? true,
+          isActive: prof.is_active ?? true,
+          last_login_at: prof.last_login_at || null,
+          lastLoginAt: prof.last_login_at || null,
+          last_active_at: prof.last_active_at || null,
+          lastActiveAt: prof.last_active_at || null,
+          login_count: prof.login_count || 0,
+          loginCount: prof.login_count || 0,
+          last_login_device: prof.last_login_device || 'Windows PC',
+          device: prof.last_login_device || 'Windows PC',
+          last_login_browser: prof.last_login_browser || 'Chrome',
+          browser: prof.last_login_browser || 'Chrome',
+          last_login_ip: prof.last_login_ip || '127.0.0.1',
+          ipAddress: prof.last_login_ip || '127.0.0.1',
+          certificatesCount: this.data.certificates.filter(c => c.student_id === u.id || c.student_id === u.email || c.student_id === prof.student_id).length
+        }
+      })
+      return { rows: combined, command: 'SELECT', rowCount: combined.length, oid: 0, fields: [] }
+    }
+
+    // 9. SELECT FROM certificates
     if (lower.includes('from certificates')) {
       if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
         if (lower.includes('created_at >=')) {
@@ -491,91 +629,6 @@ class FallbackStore {
           studentEmail: stu.email || '',
           studentCode: prof.student_id || 'GSA-2026-001',
           studentUniversity: prof.university || 'CampusConnect Ambassador Network'
-        }
-      })
-      return { rows: combined, command: 'SELECT', rowCount: combined.length, oid: 0, fields: [] }
-    }
-
-    // 9. SELECT FROM users / profiles
-    if (lower.includes('from users')) {
-      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
-        const studentCount = this.data.users.filter(u => u.role === 'student').length
-        return { rows: [{ count: studentCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
-      }
-
-      // Monthly student enrollment time-series aggregation for Admin Dashboard
-      if (lower.includes('to_char') || (lower.includes('group by') && lower.includes('month'))) {
-        const monthCounts: Record<string, number> = {}
-        const students = this.data.users.filter(u => u.role === 'student')
-        if (students.length === 0) {
-          const nowStr = new Date().toLocaleDateString('en-US', { month: 'short' })
-          monthCounts[nowStr] = 0
-        } else {
-          for (const u of students) {
-            const d = new Date(u.created_at || Date.now())
-            const m = d.toLocaleDateString('en-US', { month: 'short' })
-            monthCounts[m] = (monthCounts[m] || 0) + 1
-          }
-        }
-        const rows = Object.entries(monthCounts).map(([month, count]) => ({ month, count }))
-        return { rows, command: 'SELECT', rowCount: rows.length, oid: 0, fields: [] }
-      }
-
-      const emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null
-      let matches = this.data.users
-      if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'")) {
-        matches = matches.filter(u => {
-          const prof = this.data.profiles.find(p => p.user_id === u.id)
-          return u.email?.toLowerCase().trim() === emailParam ||
-                 u.id?.toLowerCase() === emailParam ||
-                 prof?.student_id?.toLowerCase() === emailParam
-        })
-      }
-      if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
-        matches = matches.filter(u => u.role === 'student')
-      }
-
-      const combined = matches.map(u => {
-        const prof = this.data.profiles.find(p => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {}
-        return {
-          ...u,
-          id: u.id,
-          email: u.email,
-          createdAt: u.created_at,
-          profileId: prof.id || u.id,
-          profile_id: prof.id || u.id,
-          name: prof.full_name || u.email,
-          full_name: prof.full_name || u.email,
-          studentId: prof.student_id || 'GSA-2026-KK670',
-          student_id: prof.student_id || 'GSA-2026-KK670',
-          phone: prof.phone || '',
-          university: prof.university || 'University',
-          college: prof.college || 'College',
-          course: prof.course || 'B.Tech',
-          branch: prof.branch || 'Computer Science',
-          year: prof.year || 2,
-          semester: prof.semester || 3,
-          skills: prof.skills || ['Ambassador'],
-          bio: prof.bio || '',
-          avatar_url: prof.avatar_url,
-          avatarUrl: prof.avatar_url,
-          completion_pct: prof.completion_pct || 85,
-          completionPct: prof.completion_pct || 85,
-          is_active: prof.is_active ?? true,
-          isActive: prof.is_active ?? true,
-          last_login_at: prof.last_login_at || null,
-          lastLoginAt: prof.last_login_at || null,
-          last_active_at: prof.last_active_at || null,
-          lastActiveAt: prof.last_active_at || null,
-          login_count: prof.login_count || 0,
-          loginCount: prof.login_count || 0,
-          last_login_device: prof.last_login_device || 'Windows PC',
-          device: prof.last_login_device || 'Windows PC',
-          last_login_browser: prof.last_login_browser || 'Chrome',
-          browser: prof.last_login_browser || 'Chrome',
-          last_login_ip: prof.last_login_ip || '127.0.0.1',
-          ipAddress: prof.last_login_ip || '127.0.0.1',
-          certificatesCount: this.data.certificates.filter(c => c.student_id === u.id || c.student_id === u.email || c.student_id === prof.student_id).length
         }
       })
       return { rows: combined, command: 'SELECT', rowCount: combined.length, oid: 0, fields: [] }

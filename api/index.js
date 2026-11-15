@@ -630,49 +630,6 @@ var FallbackStore = class {
       this.save();
       return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.includes("from certificates")) {
-      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
-        if (lower.includes("created_at >=")) {
-          const threshold = params[0] ? new Date(params[0]) : new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0));
-          const todayCerts = this.data.certificates.filter((c) => c.created_at && new Date(c.created_at) >= threshold).length;
-          return { rows: [{ count: todayCerts }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-        }
-        const validCerts = this.data.certificates.filter((c) => c.status === "Valid").length;
-        return { rows: [{ count: validCerts }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-      }
-      let certs = this.data.certificates;
-      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
-      if (lower.includes("where c.student_id") || lower.includes("where student_id")) {
-        certs = certs.filter((c) => {
-          const sid = String(c.student_id || "").toLowerCase();
-          const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === sid);
-          const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id?.toLowerCase() === sid);
-          return sid === param0 || stu && (stu.id.toLowerCase() === param0 || stu.email.toLowerCase() === param0) || prof && (prof.user_id.toLowerCase() === param0 || prof.student_id?.toLowerCase() === param0);
-        });
-      }
-      if (lower.includes("where c.id") || lower.includes("where id =")) {
-        certs = certs.filter((c) => String(c.id).toLowerCase() === param0 || String(c.certificate_id).toLowerCase() === param0);
-      }
-      const combined = certs.map((c) => {
-        const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === String(c.student_id).toLowerCase()) || {};
-        const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id === c.student_id || p.user_id === stu.id) || {};
-        return {
-          ...c,
-          title: c.title || c.certificate_name,
-          certificate_name: c.certificate_name || c.title,
-          type: c.type || c.certificate_type || "Ambassador",
-          certificate_type: c.certificate_type || c.type || "Ambassador",
-          file_key: c.file_key || c.storage_key,
-          storage_key: c.storage_key || c.file_key,
-          file_path: c.file_path || c.file_key || c.storage_key,
-          studentName: prof.full_name || "Student Recipient",
-          studentEmail: stu.email || "",
-          studentCode: prof.student_id || "GSA-2026-001",
-          studentUniversity: prof.university || "CampusConnect Ambassador Network"
-        };
-      });
-      return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
-    }
     if (lower.includes("from users")) {
       if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
         const studentCount = this.data.users.filter((u) => u.role === "student").length;
@@ -695,8 +652,8 @@ var FallbackStore = class {
         return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
       }
       const emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null;
-      let matches = this.data.users;
-      if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'")) {
+      let matches = [...this.data.users];
+      if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'") && !emailParam.startsWith("%")) {
         matches = matches.filter((u) => {
           const prof = this.data.profiles.find((p) => p.user_id === u.id);
           return u.email?.toLowerCase().trim() === emailParam || u.id?.toLowerCase() === emailParam || prof?.student_id?.toLowerCase() === emailParam;
@@ -704,6 +661,49 @@ var FallbackStore = class {
       }
       if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
         matches = matches.filter((u) => u.role === "student");
+      }
+      for (const p of params) {
+        if (typeof p === "string" && p.startsWith("%") && p.endsWith("%")) {
+          const searchVal = p.slice(1, -1).toLowerCase().trim();
+          if (searchVal) {
+            matches = matches.filter((u) => {
+              const prof = this.data.profiles.find((pr) => pr.user_id === u.id);
+              return u.email?.toLowerCase().includes(searchVal) || prof?.full_name?.toLowerCase().includes(searchVal) || prof?.student_id?.toLowerCase().includes(searchVal);
+            });
+          }
+        }
+      }
+      if (lower.includes("p.last_active_at >=")) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1e3);
+        matches = matches.filter((u) => {
+          const prof = this.data.profiles.find((pr) => pr.user_id === u.id);
+          return prof?.last_active_at && new Date(prof.last_active_at) >= fiveMinutesAgo;
+        });
+      }
+      if (lower.includes("order by p.full_name asc")) {
+        matches.sort((a, b) => {
+          const pa = this.data.profiles.find((p) => p.user_id === a.id)?.full_name || "";
+          const pb = this.data.profiles.find((p) => p.user_id === b.id)?.full_name || "";
+          return pa.localeCompare(pb);
+        });
+      } else if (lower.includes("order by p.login_count desc")) {
+        matches.sort((a, b) => {
+          const ca = this.data.profiles.find((p) => p.user_id === a.id)?.login_count || 0;
+          const cb = this.data.profiles.find((p) => p.user_id === b.id)?.login_count || 0;
+          return cb - ca;
+        });
+      } else if (lower.includes("order by p.last_login_at asc")) {
+        matches.sort((a, b) => {
+          const ta = new Date(this.data.profiles.find((p) => p.user_id === a.id)?.last_login_at || 0).getTime();
+          const tb = new Date(this.data.profiles.find((p) => p.user_id === b.id)?.last_login_at || 0).getTime();
+          return ta - tb;
+        });
+      } else {
+        matches.sort((a, b) => {
+          const ta = new Date(this.data.profiles.find((p) => p.user_id === a.id)?.last_login_at || 0).getTime();
+          const tb = new Date(this.data.profiles.find((p) => p.user_id === b.id)?.last_login_at || 0).getTime();
+          return tb - ta;
+        });
       }
       const combined = matches.map((u) => {
         const prof = this.data.profiles.find((p) => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {};
@@ -746,6 +746,49 @@ var FallbackStore = class {
           last_login_ip: prof.last_login_ip || "127.0.0.1",
           ipAddress: prof.last_login_ip || "127.0.0.1",
           certificatesCount: this.data.certificates.filter((c) => c.student_id === u.id || c.student_id === u.email || c.student_id === prof.student_id).length
+        };
+      });
+      return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
+    }
+    if (lower.includes("from certificates")) {
+      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
+        if (lower.includes("created_at >=")) {
+          const threshold = params[0] ? new Date(params[0]) : new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0));
+          const todayCerts = this.data.certificates.filter((c) => c.created_at && new Date(c.created_at) >= threshold).length;
+          return { rows: [{ count: todayCerts }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+        }
+        const validCerts = this.data.certificates.filter((c) => c.status === "Valid").length;
+        return { rows: [{ count: validCerts }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+      }
+      let certs = this.data.certificates;
+      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
+      if (lower.includes("where c.student_id") || lower.includes("where student_id")) {
+        certs = certs.filter((c) => {
+          const sid = String(c.student_id || "").toLowerCase();
+          const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === sid);
+          const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id?.toLowerCase() === sid);
+          return sid === param0 || stu && (stu.id.toLowerCase() === param0 || stu.email.toLowerCase() === param0) || prof && (prof.user_id.toLowerCase() === param0 || prof.student_id?.toLowerCase() === param0);
+        });
+      }
+      if (lower.includes("where c.id") || lower.includes("where id =")) {
+        certs = certs.filter((c) => String(c.id).toLowerCase() === param0 || String(c.certificate_id).toLowerCase() === param0);
+      }
+      const combined = certs.map((c) => {
+        const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === String(c.student_id).toLowerCase()) || {};
+        const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id === c.student_id || p.user_id === stu.id) || {};
+        return {
+          ...c,
+          title: c.title || c.certificate_name,
+          certificate_name: c.certificate_name || c.title,
+          type: c.type || c.certificate_type || "Ambassador",
+          certificate_type: c.certificate_type || c.type || "Ambassador",
+          file_key: c.file_key || c.storage_key,
+          storage_key: c.storage_key || c.file_key,
+          file_path: c.file_path || c.file_key || c.storage_key,
+          studentName: prof.full_name || "Student Recipient",
+          studentEmail: stu.email || "",
+          studentCode: prof.student_id || "GSA-2026-001",
+          studentUniversity: prof.university || "CampusConnect Ambassador Network"
         };
       });
       return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
