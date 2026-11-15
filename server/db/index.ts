@@ -385,15 +385,42 @@ class FallbackStore {
 
     // 7d. SELECT FROM student_login_activity
     if (lower.includes('from student_login_activity')) {
+      if (lower.includes('count(*)')) {
+        const threshold = params[0] ? new Date(params[0]) : new Date(new Date().setHours(0, 0, 0, 0))
+        const todayCount = (this.data.student_login_activity || []).filter(a => a.login_at && new Date(a.login_at) >= threshold).length
+        return { rows: [{ count: todayCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
       let acts = this.data.student_login_activity || []
       const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null
       if (param0 && (lower.includes('where user_id') || lower.includes('where student_id'))) {
         acts = acts.filter(a => a.user_id?.toLowerCase() === param0 || a.student_id?.toLowerCase() === param0)
       }
-      return { rows: acts, command: 'SELECT', rowCount: acts.length, oid: 0, fields: [] }
+      const mappedActs = acts.map(a => {
+        const u = this.data.users.find(usr => usr.id === a.user_id || usr.email === a.student_id)
+        const p = this.data.profiles.find(prf => prf.user_id === a.user_id || prf.student_id === a.student_id)
+        return {
+          ...a,
+          studentName: p?.full_name || u?.email || 'Student',
+          studentEmail: u?.email || a.student_id || 'student@campusconnect.edu'
+        }
+      })
+      return { rows: mappedActs, command: 'SELECT', rowCount: mappedActs.length, oid: 0, fields: [] }
     }
 
-    // 7e. UPDATE profiles
+    // 7e. SELECT FROM profiles
+    if (lower.includes('from profiles')) {
+      if (lower.includes('count(distinct user_id)') || lower.includes('count(*)')) {
+        const threshold = params[0] ? new Date(params[0]) : new Date(Date.now() - 5 * 60 * 1000)
+        const onlineCount = this.data.profiles.filter(p => p.last_active_at && new Date(p.last_active_at) >= threshold).length
+        return { rows: [{ count: onlineCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
+      if (lower.includes('sum(login_count)')) {
+        const total = this.data.profiles.reduce((sum, p) => sum + (p.login_count || 0), 0)
+        return { rows: [{ total }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
+    }
+
+    // 7f. UPDATE profiles
     if (lower.startsWith('update profiles')) {
       const uid = params[params.length - 1]
       const prof = this.data.profiles.find(p => p.user_id === uid || p.id === uid)
@@ -415,6 +442,16 @@ class FallbackStore {
 
     // 8. SELECT FROM certificates (Prioritized before users to prevent JOIN collisions)
     if (lower.includes('from certificates')) {
+      if (lower.includes('count(*)')) {
+        if (lower.includes('created_at >=')) {
+          const threshold = params[0] ? new Date(params[0]) : new Date(new Date().setHours(0, 0, 0, 0))
+          const todayCerts = this.data.certificates.filter(c => c.created_at && new Date(c.created_at) >= threshold).length
+          return { rows: [{ count: todayCerts }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+        }
+        const validCerts = this.data.certificates.filter(c => c.status === 'Valid').length
+        return { rows: [{ count: validCerts }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
+
       let certs = this.data.certificates
       const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null
 
@@ -461,6 +498,11 @@ class FallbackStore {
 
     // 9. SELECT FROM users / profiles
     if (lower.includes('from users')) {
+      if (lower.includes('count(*)')) {
+        const studentCount = this.data.users.filter(u => u.role === 'student').length
+        return { rows: [{ count: studentCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
+      }
+
       // Monthly student enrollment time-series aggregation for Admin Dashboard
       if (lower.includes('to_char') || (lower.includes('group by') && lower.includes('month'))) {
         const monthCounts: Record<string, number> = {}
@@ -481,16 +523,26 @@ class FallbackStore {
 
       const emailParam = params[0]?.toLowerCase().trim()
       let matches = this.data.users
-      if (emailParam) {
+      if (emailParam && !lower.includes('where u.role =')) {
         matches = matches.filter(u => u.email?.toLowerCase().trim() === emailParam || u.id === emailParam)
       }
+      if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
+        matches = matches.filter(u => u.role === 'student')
+      }
+
       const combined = matches.map(u => {
         const prof = this.data.profiles.find(p => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {}
         return {
           ...u,
-          profile_id: prof.id,
+          id: u.id,
+          email: u.email,
+          createdAt: u.created_at,
+          profileId: prof.id || u.id,
+          profile_id: prof.id || u.id,
+          name: prof.full_name || u.email,
           full_name: prof.full_name || u.email,
-          student_id: prof.student_id || 'GSA-2026-001',
+          studentId: prof.student_id || 'GSA-2026-KK670',
+          student_id: prof.student_id || 'GSA-2026-KK670',
           phone: prof.phone || '',
           university: prof.university || 'University',
           college: prof.college || 'College',
@@ -501,14 +553,24 @@ class FallbackStore {
           skills: prof.skills || ['Ambassador'],
           bio: prof.bio || '',
           avatar_url: prof.avatar_url,
+          avatarUrl: prof.avatar_url,
           completion_pct: prof.completion_pct || 85,
+          completionPct: prof.completion_pct || 85,
           is_active: prof.is_active ?? true,
+          isActive: prof.is_active ?? true,
           last_login_at: prof.last_login_at || null,
+          lastLoginAt: prof.last_login_at || null,
           last_active_at: prof.last_active_at || null,
+          lastActiveAt: prof.last_active_at || null,
           login_count: prof.login_count || 0,
+          loginCount: prof.login_count || 0,
           last_login_device: prof.last_login_device || 'Windows PC',
+          device: prof.last_login_device || 'Windows PC',
           last_login_browser: prof.last_login_browser || 'Chrome',
-          last_login_ip: prof.last_login_ip || '127.0.0.1'
+          browser: prof.last_login_browser || 'Chrome',
+          last_login_ip: prof.last_login_ip || '127.0.0.1',
+          ipAddress: prof.last_login_ip || '127.0.0.1',
+          certificatesCount: this.data.certificates.filter(c => c.student_id === u.id || c.student_id === u.email || c.student_id === prof.student_id).length
         }
       })
       return { rows: combined, command: 'SELECT', rowCount: combined.length, oid: 0, fields: [] }

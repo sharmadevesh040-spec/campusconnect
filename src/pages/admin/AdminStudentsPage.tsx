@@ -372,7 +372,8 @@ export default function AdminStudentsPage() {
               ) : (
                 students.map((student) => {
                   const isOnline = student.status === 'Online'
-                  const isMobile = student.device.includes('Android') || student.device.includes('iPhone') || student.device.includes('iPad')
+                  const deviceStr = student.device || 'Windows PC'
+                  const isMobile = deviceStr.includes('Android') || deviceStr.includes('iPhone') || deviceStr.includes('iPad')
 
                   return (
                     <tr
@@ -384,13 +385,13 @@ export default function AdminStudentsPage() {
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={student.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(student.name)}`}
-                            alt={student.name}
+                            src={student.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(student.name || student.email || 'Student')}`}
+                            alt={student.name || student.email || 'Student'}
                             className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 object-cover"
                           />
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-1.5">
-                              {student.name}
+                              {student.name || student.email}
                             </p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono">
                               <span>{student.email}</span>
@@ -455,11 +456,11 @@ export default function AdminStudentsPage() {
                           ) : (
                             <Monitor className="w-3.5 h-3.5 text-slate-400" />
                           )}
-                          <span className="font-medium">{student.device}</span>
+                          <span className="font-medium">{student.device || 'Windows PC'}</span>
                           <span className="text-slate-400">·</span>
-                          <span className="text-slate-500 dark:text-slate-400">{student.browser}</span>
+                          <span className="text-slate-500 dark:text-slate-400">{student.browser || 'Chrome'}</span>
                         </div>
-                        <p className="text-[10px] font-mono text-slate-400 mt-0.5">{student.ipAddress}</p>
+                        <p className="text-[10px] font-mono text-slate-400 mt-0.5">{student.ipAddress || '127.0.0.1'}</p>
                       </td>
 
                       {/* Credentials */}

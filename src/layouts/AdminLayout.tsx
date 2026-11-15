@@ -22,7 +22,11 @@ const NAV = [
 
 export default function AdminLayout() {
   const { currentUser, userProfile, logout } = useAuth()
-  const email = (userProfile?.email || currentUser?.email)?.toLowerCase().trim()
+  const email = (userProfile?.email || currentUser?.email)?.toLowerCase()?.trim()
+
+  if (!email) {
+    return <Navigate to="/login" replace />
+  }
 
   // Strict check: Only sharmadevesh040@gmail.com is allowed in the Admin Portal
   if (email !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
