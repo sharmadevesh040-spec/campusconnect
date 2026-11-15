@@ -198,6 +198,33 @@ CREATE INDEX IF NOT EXISTS idx_interviews_student_date ON interviews(student_id,
 CREATE INDEX IF NOT EXISTS idx_tasks_student_status ON tasks(student_id, status);
 CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_event_reg_student ON event_registrations(student_id);
+
+-- Student Login Activity Table
+CREATE TABLE IF NOT EXISTS student_login_activity (
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    student_id VARCHAR(100),
+    login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    logout_at TIMESTAMP WITH TIME ZONE,
+    last_active_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    device VARCHAR(100) DEFAULT 'Unknown Device',
+    browser VARCHAR(100) DEFAULT 'Unknown Browser',
+    ip_address VARCHAR(100),
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_activity_user_id ON student_login_activity(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_activity_login_at ON student_login_activity(login_at DESC);
+
+-- Profiles Table Extensions for Activity Tracking
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
+
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_email_tokens_lookup ON email_tokens(email, token, type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(created_at DESC);

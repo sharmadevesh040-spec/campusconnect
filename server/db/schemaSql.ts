@@ -181,8 +181,37 @@ CREATE TABLE IF NOT EXISTS email_tokens (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Student Login Activity Table
+CREATE TABLE IF NOT EXISTS student_login_activity (
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    student_id VARCHAR(100),
+    login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    logout_at TIMESTAMP WITH TIME ZONE,
+    last_active_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    device VARCHAR(100) DEFAULT 'Unknown Device',
+    browser VARCHAR(100) DEFAULT 'Unknown Browser',
+    ip_address VARCHAR(100),
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_activity_user_id ON student_login_activity(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_activity_login_at ON student_login_activity(login_at DESC);
+
 -- Safe migrations for newly added columns if table already exists
 ALTER TABLE certificates ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 ALTER TABLE certificates ADD COLUMN IF NOT EXISTS type VARCHAR(100) DEFAULT 'Participation';
 ALTER TABLE certificates ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
 `

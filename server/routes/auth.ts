@@ -3,12 +3,13 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import crypto from 'crypto'
 import { query } from '../db'
-import { generateToken, requireAuth, AuthRequest, logAudit } from '../middleware/auth'
+import { generateToken, verifyToken, requireAuth, AuthRequest, logAudit } from '../middleware/auth'
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendLoginOTPEmail
 } from '../services/email'
+import { recordStudentLogin, recordStudentLogout } from '../services/activityService'
 
 const router = Router()
 
@@ -222,6 +223,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       studentId: row.student_id
     })
 
+    // Record login activity for student
+    if (row.role === 'student') {
+      await recordStudentLogin(row.id, row.student_id || row.id, req)
+    }
+
     await logAudit(row.id, 'USER_LOGIN', 'users', row.id, { role: row.role })
 
     res.json({
@@ -399,6 +405,10 @@ router.post(['/login-otp', '/verify-login-otp'], async (req: Request, res: Respo
       studentId: row.student_id
     })
 
+    if (row.role === 'student') {
+      await recordStudentLogin(row.id, row.student_id || row.id, req)
+    }
+
     await logAudit(row.id, 'USER_LOGIN_OTP', 'users', row.id, { role: row.role })
 
     res.json({
@@ -494,6 +504,11 @@ router.post('/verify-email', async (req: Request, res: Response): Promise<void> 
         role: row.role,
         studentId: row.student_id
       })
+
+      if (row.role === 'student') {
+        await recordStudentLogin(row.id, row.student_id || row.id, req)
+      }
+
       userData = {
         id: row.id,
         email: row.email,
@@ -526,6 +541,25 @@ router.post('/verify-email', async (req: Request, res: Response): Promise<void> 
   } catch (err: any) {
     console.error('[Verify Email Error]', err)
     res.status(500).json({ error: err.message || 'Email verification failed' })
+  }
+})
+
+// POST /api/auth/logout (Records session end & updates last_active_at)
+router.post('/logout', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1]
+      try {
+        const decoded = verifyToken(token)
+        if (decoded?.id) {
+          await recordStudentLogout(decoded.id)
+        }
+      } catch {}
+    }
+    res.json({ message: 'Logged out successfully' })
+  } catch {
+    res.json({ message: 'Logged out' })
   }
 })
 

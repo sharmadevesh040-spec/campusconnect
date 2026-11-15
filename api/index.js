@@ -194,10 +194,39 @@ CREATE TABLE IF NOT EXISTS email_tokens (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Student Login Activity Table
+CREATE TABLE IF NOT EXISTS student_login_activity (
+    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    student_id VARCHAR(100),
+    login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    logout_at TIMESTAMP WITH TIME ZONE,
+    last_active_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    device VARCHAR(100) DEFAULT 'Unknown Device',
+    browser VARCHAR(100) DEFAULT 'Unknown Browser',
+    ip_address VARCHAR(100),
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_activity_user_id ON student_login_activity(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_activity_login_at ON student_login_activity(login_at DESC);
+
 -- Safe migrations for newly added columns if table already exists
 ALTER TABLE certificates ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 ALTER TABLE certificates ADD COLUMN IF NOT EXISTS type VARCHAR(100) DEFAULT 'Participation';
 ALTER TABLE certificates ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
 `;
 
 // server/db/index.ts
@@ -274,7 +303,13 @@ var FallbackStore = class {
         bio: "Campus Ambassador Lead & Executive Director",
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA",
         completion_pct: 100,
-        is_active: true
+        is_active: true,
+        last_login_at: /* @__PURE__ */ new Date(),
+        last_active_at: /* @__PURE__ */ new Date(),
+        login_count: 10,
+        last_login_device: "Windows PC",
+        last_login_browser: "Chrome",
+        last_login_ip: "127.0.0.1"
       },
       {
         id: "prof-khushi-kanu",
@@ -292,10 +327,31 @@ var FallbackStore = class {
         bio: "Campus Ambassador & Student Representative",
         avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi+Kanu",
         completion_pct: 100,
-        is_active: true
+        is_active: true,
+        last_login_at: /* @__PURE__ */ new Date(),
+        last_active_at: /* @__PURE__ */ new Date(),
+        login_count: 5,
+        last_login_device: "Windows PC",
+        last_login_browser: "Chrome",
+        last_login_ip: "127.0.0.1"
       }
     ],
     email_tokens: [],
+    student_login_activity: [
+      {
+        id: "act-khushi-001",
+        user_id: "u-khushi-kanu",
+        student_id: "GSA-2026-KK670",
+        login_at: /* @__PURE__ */ new Date(),
+        logout_at: null,
+        last_active_at: /* @__PURE__ */ new Date(),
+        device: "Windows PC",
+        browser: "Chrome",
+        ip_address: "127.0.0.1",
+        user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        created_at: /* @__PURE__ */ new Date()
+      }
+    ],
     certificates: [
       {
         id: "cert-khushi-001",
@@ -491,6 +547,64 @@ var FallbackStore = class {
       this.save();
       return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
     }
+    if (lower.startsWith("insert into student_login_activity")) {
+      const [id, user_id, student_id, login_at, last_active_at, device, browser, ip_address, user_agent] = params;
+      const newAct = {
+        id: id || "act-" + Date.now(),
+        user_id,
+        student_id,
+        login_at: login_at || /* @__PURE__ */ new Date(),
+        logout_at: null,
+        last_active_at: last_active_at || /* @__PURE__ */ new Date(),
+        device: device || "Windows PC",
+        browser: browser || "Chrome",
+        ip_address: ip_address || "127.0.0.1",
+        user_agent: user_agent || "",
+        created_at: /* @__PURE__ */ new Date()
+      };
+      this.data.student_login_activity = this.data.student_login_activity || [];
+      this.data.student_login_activity.unshift(newAct);
+      this.save();
+      return { rows: [newAct], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("update student_login_activity")) {
+      this.data.student_login_activity = this.data.student_login_activity || [];
+      const [val, uid] = params;
+      for (const act of this.data.student_login_activity) {
+        if (act.user_id === uid || act.id === uid) {
+          if (lower.includes("logout_at")) act.logout_at = val || /* @__PURE__ */ new Date();
+          if (lower.includes("last_active_at")) act.last_active_at = val || /* @__PURE__ */ new Date();
+        }
+      }
+      this.save();
+      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.includes("from student_login_activity")) {
+      let acts = this.data.student_login_activity || [];
+      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
+      if (param0 && (lower.includes("where user_id") || lower.includes("where student_id"))) {
+        acts = acts.filter((a) => a.user_id?.toLowerCase() === param0 || a.student_id?.toLowerCase() === param0);
+      }
+      return { rows: acts, command: "SELECT", rowCount: acts.length, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("update profiles")) {
+      const uid = params[params.length - 1];
+      const prof = this.data.profiles.find((p) => p.user_id === uid || p.id === uid);
+      if (prof) {
+        if (lower.includes("login_count")) {
+          prof.login_count = (prof.login_count || 0) + 1;
+          prof.last_login_at = /* @__PURE__ */ new Date();
+          prof.last_active_at = /* @__PURE__ */ new Date();
+          if (params[0]) prof.last_login_device = params[0];
+          if (params[1]) prof.last_login_browser = params[1];
+          if (params[2]) prof.last_login_ip = params[2];
+        } else if (lower.includes("last_active_at")) {
+          prof.last_active_at = /* @__PURE__ */ new Date();
+        }
+      }
+      this.save();
+      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    }
     if (lower.includes("from certificates")) {
       let certs = this.data.certificates;
       const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
@@ -565,7 +679,13 @@ var FallbackStore = class {
           bio: prof.bio || "",
           avatar_url: prof.avatar_url,
           completion_pct: prof.completion_pct || 85,
-          is_active: prof.is_active ?? true
+          is_active: prof.is_active ?? true,
+          last_login_at: prof.last_login_at || null,
+          last_active_at: prof.last_active_at || null,
+          login_count: prof.login_count || 0,
+          last_login_device: prof.last_login_device || "Windows PC",
+          last_login_browser: prof.last_login_browser || "Chrome",
+          last_login_ip: prof.last_login_ip || "127.0.0.1"
         };
       });
       return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
@@ -696,6 +816,12 @@ async function runMigration() {
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
     `).catch(() => {
     });
     console.log("[Migration] Schema migration completed successfully.");
@@ -867,7 +993,7 @@ async function seedDatabase() {
 import { Router } from "express";
 import bcrypt2 from "bcryptjs";
 import { z } from "zod";
-import crypto from "crypto";
+import crypto2 from "crypto";
 
 // server/middleware/auth.ts
 import jwt from "jsonwebtoken";
@@ -892,6 +1018,13 @@ function generateToken(user) {
     getJwtSecret(),
     { expiresIn: "7d" }
   );
+}
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, getJwtSecret());
+  } catch {
+    return null;
+  }
 }
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -1161,6 +1294,94 @@ async function sendLoginOTPEmail(to, otp, fullName = "User") {
   return res.success;
 }
 
+// server/services/activityService.ts
+import crypto from "crypto";
+function parseClientInfo(req) {
+  const ua = req.headers["user-agent"] || "";
+  let device = "Desktop PC";
+  if (/windows phone/i.test(ua)) device = "Windows Phone";
+  else if (/win64|win32|windows/i.test(ua)) device = "Windows PC";
+  else if (/ipad/i.test(ua)) device = "iPad";
+  else if (/iphone/i.test(ua)) device = "iPhone";
+  else if (/android/i.test(ua)) device = "Android";
+  else if (/macintosh|mac os x/i.test(ua)) device = "Mac";
+  else if (/linux/i.test(ua)) device = "Linux PC";
+  let browser = "Browser";
+  if (/edg([ea]|ios)/i.test(ua)) browser = "Edge";
+  else if (/opr|opera/i.test(ua)) browser = "Opera";
+  else if (/chrome|crios/i.test(ua)) browser = "Chrome";
+  else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
+  else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = "Safari";
+  const forwarded = req.headers["x-forwarded-for"];
+  const ip = typeof forwarded === "string" ? forwarded.split(",")[0].trim() : req.socket?.remoteAddress || req.ip || "127.0.0.1";
+  return { device, browser, ip, userAgent: ua };
+}
+async function recordStudentLogin(userId, studentId, req) {
+  try {
+    const client = parseClientInfo(req);
+    const activityId = crypto.randomUUID();
+    await query(
+      `INSERT INTO student_login_activity (id, user_id, student_id, login_at, last_active_at, device, browser, ip_address, user_agent)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4, $5, $6, $7)`,
+      [activityId, userId, studentId, client.device, client.browser, client.ip, client.userAgent]
+    ).catch((e) => console.warn("[Activity] Notice on activity insert:", e.message));
+    await query(
+      `UPDATE profiles SET
+        last_login_at = CURRENT_TIMESTAMP,
+        last_active_at = CURRENT_TIMESTAMP,
+        login_count = COALESCE(login_count, 0) + 1,
+        last_login_device = $1,
+        last_login_browser = $2,
+        last_login_ip = $3,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $4`,
+      [client.device, client.browser, client.ip, userId]
+    ).catch((e) => console.warn("[Activity] Notice on profile activity update:", e.message));
+  } catch (err) {
+    console.error("[Activity] Failed to record student login:", err);
+  }
+}
+async function recordStudentHeartbeat(userId) {
+  try {
+    await query(
+      `UPDATE profiles SET last_active_at = CURRENT_TIMESTAMP WHERE user_id = $1`,
+      [userId]
+    ).catch(() => {
+    });
+    await query(
+      `UPDATE student_login_activity SET last_active_at = CURRENT_TIMESTAMP
+       WHERE id = (
+         SELECT id FROM student_login_activity
+         WHERE user_id = $1 AND logout_at IS NULL
+         ORDER BY login_at DESC LIMIT 1
+       )`,
+      [userId]
+    ).catch(() => {
+    });
+  } catch {
+  }
+}
+async function recordStudentLogout(userId) {
+  try {
+    await query(
+      `UPDATE profiles SET last_active_at = CURRENT_TIMESTAMP WHERE user_id = $1`,
+      [userId]
+    ).catch(() => {
+    });
+    await query(
+      `UPDATE student_login_activity SET logout_at = CURRENT_TIMESTAMP, last_active_at = CURRENT_TIMESTAMP
+       WHERE id = (
+         SELECT id FROM student_login_activity
+         WHERE user_id = $1 AND logout_at IS NULL
+         ORDER BY login_at DESC LIMIT 1
+       )`,
+      [userId]
+    ).catch(() => {
+    });
+  } catch {
+  }
+}
+
 // server/routes/auth.ts
 var router = Router();
 var registerSchema = z.object({
@@ -1198,14 +1419,14 @@ function getAuthSecret(purpose = "") {
 function getStatelessVerificationCode(email, stepOffset = 0) {
   const secret = getAuthSecret("verification");
   const timeStep = Math.floor(Date.now() / (1e3 * 60 * 30)) + stepOffset;
-  const h = crypto.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
+  const h = crypto2.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
   const digits = h.replace(/\D/g, "");
   return (digits.slice(0, 6) + "829471").slice(0, 6);
 }
 function getStatelessLoginOtp(email, stepOffset = 0) {
   const secret = getAuthSecret("login-otp");
   const timeStep = Math.floor(Date.now() / (1e3 * 60 * 15)) + stepOffset;
-  const h = crypto.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
+  const h = crypto2.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
   const digits = h.replace(/\D/g, "");
   return (digits.slice(0, 6) + "938152").slice(0, 6);
 }
@@ -1220,8 +1441,8 @@ router.post("/register", async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     const existing = await query(`SELECT id, is_verified FROM users WHERE LOWER(email) = LOWER($1)`, [normalizedEmail]);
     const passwordHash = await bcrypt2.hash(password, 10);
-    let newUserId = crypto.randomUUID();
-    const newProfileId = crypto.randomUUID();
+    let newUserId = crypto2.randomUUID();
+    const newProfileId = crypto2.randomUUID();
     const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
     if (existing.rows.length > 0) {
       newUserId = existing.rows[0].id;
@@ -1328,6 +1549,9 @@ router.post("/login", async (req, res) => {
       role: row.role,
       studentId: row.student_id
     });
+    if (row.role === "student") {
+      await recordStudentLogin(row.id, row.student_id || row.id, req);
+    }
     await logAudit(row.id, "USER_LOGIN", "users", row.id, { role: row.role });
     res.json({
       message: "Login successful",
@@ -1476,6 +1700,9 @@ router.post(["/login-otp", "/verify-login-otp"], async (req, res) => {
       role: row.role,
       studentId: row.student_id
     });
+    if (row.role === "student") {
+      await recordStudentLogin(row.id, row.student_id || row.id, req);
+    }
     await logAudit(row.id, "USER_LOGIN_OTP", "users", row.id, { role: row.role });
     res.json({
       message: "Passcode verified successfully. Logged in!",
@@ -1554,6 +1781,9 @@ router.post("/verify-email", async (req, res) => {
         role: row.role,
         studentId: row.student_id
       });
+      if (row.role === "student") {
+        await recordStudentLogin(row.id, row.student_id || row.id, req);
+      }
       userData = {
         id: row.id,
         email: row.email,
@@ -1585,6 +1815,24 @@ router.post("/verify-email", async (req, res) => {
   } catch (err) {
     console.error("[Verify Email Error]", err);
     res.status(500).json({ error: err.message || "Email verification failed" });
+  }
+});
+router.post("/logout", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      try {
+        const decoded = verifyToken(token);
+        if (decoded?.id) {
+          await recordStudentLogout(decoded.id);
+        }
+      } catch {
+      }
+    }
+    res.json({ message: "Logged out successfully" });
+  } catch {
+    res.json({ message: "Logged out" });
   }
 });
 router.post("/resend-verification", async (req, res) => {
@@ -1888,13 +2136,13 @@ ${400 + streamLength}
 
 // server/mcp/certificateTools.ts
 import fs3 from "fs";
-import crypto3 from "crypto";
+import crypto4 from "crypto";
 
 // server/storage/index.ts
 import fs2 from "fs";
 import path2 from "path";
 import os2 from "os";
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 var isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
 var UPLOAD_DIR = isServerless ? path2.join(os2.tmpdir(), "uploads") : path2.resolve(process.cwd(), "uploads");
 var CERT_DIR = path2.join(UPLOAD_DIR, "certificates");
@@ -1938,7 +2186,7 @@ function deleteCertificateFile(fileKeyOrPath) {
 }
 async function saveFile(buffer, originalName, category = "documents") {
   const ext = path2.extname(originalName) || ".pdf";
-  const fileKey = `${category}/${Date.now()}-${crypto2.randomBytes(8).toString("hex")}${ext}`;
+  const fileKey = `${category}/${Date.now()}-${crypto3.randomBytes(8).toString("hex")}${ext}`;
   const targetPath = path2.join(UPLOAD_DIR, fileKey);
   const targetDir = path2.dirname(targetPath);
   if (!fs2.existsSync(targetDir)) {
@@ -1963,7 +2211,7 @@ function getFilePath(fileKey) {
 function generateSignedDownloadUrl(fileKey, studentId) {
   const expires = Date.now() + 1e3 * 60 * 60;
   const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
-  const hmac = crypto2.createHmac("sha256", secret);
+  const hmac = crypto3.createHmac("sha256", secret);
   hmac.update(`${fileKey}:${studentId}:${expires}`);
   const signature = hmac.digest("hex");
   return `/api/storage/download?key=${encodeURIComponent(fileKey)}&expires=${expires}&sig=${signature}&user=${encodeURIComponent(studentId)}`;
@@ -1971,10 +2219,10 @@ function generateSignedDownloadUrl(fileKey, studentId) {
 function verifySignedDownload(fileKey, studentId, expires, sig) {
   if (Date.now() > expires) return false;
   const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
-  const hmac = crypto2.createHmac("sha256", secret);
+  const hmac = crypto3.createHmac("sha256", secret);
   hmac.update(`${fileKey}:${studentId}:${expires}`);
   const expectedSig = hmac.digest("hex");
-  return crypto2.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig));
+  return crypto3.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig));
 }
 
 // server/mcp/certificateTools.ts
@@ -2048,8 +2296,8 @@ async function uploadCertificateTool(params) {
   if (!header.startsWith("%PDF-")) {
     return { success: false, statusCode: 400, error: "Invalid file format: Only valid PDF documents are allowed" };
   }
-  const certIdCode = `CERT-2026-${crypto3.randomBytes(3).toString("hex").toUpperCase()}`;
-  const newDbId = `cert-${Date.now()}-${crypto3.randomBytes(4).toString("hex")}`;
+  const certIdCode = `CERT-2026-${crypto4.randomBytes(3).toString("hex").toUpperCase()}`;
+  const newDbId = `cert-${Date.now()}-${crypto4.randomBytes(4).toString("hex")}`;
   let stored;
   try {
     stored = await saveCertificateFile(fileBuffer, resolvedStudentCode, certIdCode);
@@ -2354,7 +2602,7 @@ async function verifyCertificateTool(params) {
     status: cert.status,
     verified: isValid
   });
-  const verificationHash = crypto3.createHash("sha256").update(`${cert.certificate_id}:${cert.issue_date}:${cert.status}`).digest("hex");
+  const verificationHash = crypto4.createHash("sha256").update(`${cert.certificate_id}:${cert.issue_date}:${cert.status}`).digest("hex");
   return {
     verified: isValid,
     is_valid: isValid,
@@ -2732,12 +2980,21 @@ router2.get("/resources", async (_req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router2.post("/heartbeat", async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    await recordStudentHeartbeat(studentId);
+    res.json({ status: "ok", activeAt: (/* @__PURE__ */ new Date()).toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 var student_default = router2;
 
 // server/routes/admin.ts
 import { Router as Router3 } from "express";
 import fs5 from "fs";
-import crypto4 from "crypto";
+import crypto5 from "crypto";
 import bcrypt3 from "bcryptjs";
 import multer from "multer";
 import Papa from "papaparse";
@@ -2749,12 +3006,29 @@ router3.get("/dashboard", async (_req, res) => {
   try {
     const studentCountRes = await query(`SELECT count(*)::int FROM users WHERE role = 'student'`);
     const totalStudents = studentCountRes.rows[0]?.count || 0;
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1e3);
+    const activeStudentsRes = await query(`
+      SELECT count(DISTINCT user_id)::int FROM profiles
+      WHERE last_active_at >= $1
+    `, [fiveMinutesAgo]).catch(() => ({ rows: [{ count: 0 }] }));
+    const activeStudents = activeStudentsRes.rows[0]?.count || 0;
+    const startOfToday = /* @__PURE__ */ new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayLoginsRes = await query(`
+      SELECT count(*)::int FROM student_login_activity
+      WHERE login_at >= $1
+    `, [startOfToday]).catch(() => ({ rows: [{ count: 0 }] }));
+    const todayLogins = todayLoginsRes.rows[0]?.count || 0;
+    const totalLoginsRes = await query(`
+      SELECT COALESCE(SUM(login_count), 0)::int as total FROM profiles
+    `).catch(() => ({ rows: [{ total: 0 }] }));
+    const totalLogins = totalLoginsRes.rows[0]?.total || 0;
     const certCountRes = await query(`SELECT count(*)::int FROM certificates WHERE status = 'Valid'`);
-    const certificatesIssued = certCountRes.rows[0]?.count || 0;
-    const evtCountRes = await query(
-      `SELECT count(*)::int FROM events WHERE date >= CURRENT_DATE - INTERVAL '1 day'`
-    );
-    const upcomingEvents = evtCountRes.rows[0]?.count || 0;
+    const totalCertificates = certCountRes.rows[0]?.count || 0;
+    const todayCertsRes = await query(`
+      SELECT count(*)::int FROM certificates WHERE created_at >= $1
+    `, [startOfToday]).catch(() => ({ rows: [{ count: 0 }] }));
+    const todayCertificates = todayCertsRes.rows[0]?.count || 0;
     const growthRes = await query(`
       SELECT to_char(created_at, 'Mon') as month, count(*)::int as count
       FROM users
@@ -2763,41 +3037,156 @@ router3.get("/dashboard", async (_req, res) => {
       ORDER BY date_trunc('month', created_at) ASC
     `);
     const studentGrowth = growthRes.rows.length > 0 ? growthRes.rows : [{ month: (/* @__PURE__ */ new Date()).toLocaleString("en-US", { month: "short" }), count: totalStudents }];
+    const recentActivityRes = await query(`
+      SELECT a.*, p.full_name as "studentName", u.email as "studentEmail"
+      FROM student_login_activity a
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN profiles p ON a.user_id = p.user_id
+      ORDER BY a.login_at DESC
+      LIMIT 6
+    `).catch(() => ({ rows: [] }));
     res.json({
       metrics: {
         totalStudents,
-        certificatesIssued,
-        upcomingEvents
+        activeStudents,
+        todayLogins,
+        totalLogins,
+        totalCertificates,
+        todayCertificates,
+        certificatesIssued: totalCertificates
       },
       charts: {
         studentGrowth
-      }
+      },
+      recentActivity: recentActivityRes.rows
     });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to fetch admin metrics" });
   }
 });
-router3.get("/students", async (req, res) => {
+router3.get(["/students", "/student-activity"], async (req, res) => {
   try {
-    const q = (req.query.q || "").toLowerCase();
+    const q = (req.query.q || "").toLowerCase().trim();
+    const filter = (req.query.filter || "all").toLowerCase().trim();
+    const sort = (req.query.sort || "latest").toLowerCase().trim();
     let sql = `
       SELECT u.id, u.email, u.created_at as "createdAt",
-             p.full_name as name, p.student_id as "studentId", p.university,
-             p.college, p.course, p.branch, p.year, p.phone,
+             p.id as "profileId", p.full_name as name, p.student_id as "studentId",
+             p.university, p.college, p.course, p.branch, p.year, p.phone,
              p.completion_pct as "completionPct", p.is_active as "isActive",
-             p.avatar_url as "avatarUrl"
+             p.avatar_url as "avatarUrl",
+             p.last_login_at as "lastLoginAt",
+             p.last_active_at as "lastActiveAt",
+             COALESCE(p.login_count, 0) as "loginCount",
+             p.last_login_device as "device",
+             p.last_login_browser as "browser",
+             p.last_login_ip as "ipAddress",
+             (SELECT count(*)::int FROM certificates c WHERE c.student_id = u.id OR c.student_id = p.student_id OR c.student_id = u.email) as "certificatesCount"
       FROM users u
       LEFT JOIN profiles p ON u.id = p.user_id
-      WHERE (p.id IS NOT NULL OR u.role IN ('student', 'super_admin', 'admin'))
+      WHERE u.role = 'student'
     `;
     const params = [];
     if (q) {
-      sql += ` AND (LOWER(p.full_name) LIKE $1 OR LOWER(u.email) LIKE $1 OR LOWER(p.student_id) LIKE $1)`;
       params.push(`%${q}%`);
+      sql += ` AND (LOWER(p.full_name) LIKE $${params.length} OR LOWER(u.email) LIKE $${params.length} OR LOWER(p.student_id) LIKE $${params.length})`;
     }
-    sql += ` ORDER BY u.created_at DESC`;
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1e3);
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1e3);
+    const startOfToday = /* @__PURE__ */ new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1e3);
+    if (filter === "online") {
+      params.push(fiveMinutesAgo);
+      sql += ` AND p.last_active_at >= $${params.length}`;
+    } else if (filter === "active" || filter === "recently_active") {
+      params.push(twentyFourHoursAgo);
+      sql += ` AND p.last_active_at >= $${params.length}`;
+    } else if (filter === "today") {
+      params.push(startOfToday);
+      sql += ` AND p.last_login_at >= $${params.length}`;
+    } else if (filter === "week") {
+      params.push(startOfWeek);
+      sql += ` AND p.last_login_at >= $${params.length}`;
+    }
+    if (sort === "oldest") {
+      sql += ` ORDER BY p.last_login_at ASC NULLS LAST`;
+    } else if (sort === "name") {
+      sql += ` ORDER BY p.full_name ASC`;
+    } else if (sort === "logins") {
+      sql += ` ORDER BY p.login_count DESC, p.last_login_at DESC`;
+    } else {
+      sql += ` ORDER BY p.last_login_at DESC NULLS LAST, u.created_at DESC`;
+    }
     const resSql = await query(sql, params);
-    res.json(resSql.rows);
+    const nowTime = Date.now();
+    const mapped = resSql.rows.map((row) => {
+      const lastActiveTime = row.lastActiveAt ? new Date(row.lastActiveAt).getTime() : 0;
+      const isOnline = nowTime - lastActiveTime <= 5 * 60 * 1e3;
+      return {
+        ...row,
+        status: isOnline ? "Online" : "Offline",
+        device: row.device || "Windows PC",
+        browser: row.browser || "Chrome",
+        ipAddress: row.ipAddress || "127.0.0.1"
+      };
+    });
+    res.json(mapped);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router3.get("/students/:id/details", async (req, res) => {
+  try {
+    const studentIdParam = req.params.id;
+    const userRes = await query(`
+      SELECT u.id, u.email, u.created_at as "createdAt",
+             p.id as "profileId", p.full_name as name, p.student_id as "studentId",
+             p.university, p.college, p.course, p.branch, p.year, p.semester, p.phone,
+             p.bio, p.skills, p.avatar_url as "avatarUrl", p.completion_pct as "completionPct",
+             p.is_active as "isActive",
+             p.last_login_at as "lastLoginAt",
+             p.last_active_at as "lastActiveAt",
+             COALESCE(p.login_count, 0) as "loginCount",
+             p.last_login_device as "device",
+             p.last_login_browser as "browser",
+             p.last_login_ip as "ipAddress"
+      FROM users u
+      LEFT JOIN profiles p ON u.id = p.user_id
+      WHERE u.id = $1 OR p.user_id = $1 OR p.student_id = $1 OR u.email = $1
+    `, [studentIdParam]);
+    if (userRes.rows.length === 0) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+    const student = userRes.rows[0];
+    const nowTime = Date.now();
+    const lastActiveTime = student.lastActiveAt ? new Date(student.lastActiveAt).getTime() : 0;
+    const isOnline = nowTime - lastActiveTime <= 5 * 60 * 1e3;
+    const certsRes = await query(`
+      SELECT id, certificate_id as "certificateId", title, certificate_name as "certificateName",
+             type, certificate_type as "certificateType", program, issue_date as "issueDate",
+             file_url as "fileUrl", status, created_at as "createdAt"
+      FROM certificates
+      WHERE student_id = $1 OR student_id = $2 OR student_id = $3
+      ORDER BY issue_date DESC
+    `, [student.id, student.studentId, student.email]);
+    const loginsRes = await query(`
+      SELECT id, login_at as "loginAt", logout_at as "logoutAt", last_active_at as "lastActiveAt",
+             device, browser, ip_address as "ipAddress", user_agent as "userAgent"
+      FROM student_login_activity
+      WHERE user_id = $1 OR student_id = $2
+      ORDER BY login_at DESC
+      LIMIT 25
+    `, [student.id, student.studentId]);
+    res.json({
+      student: {
+        ...student,
+        status: isOnline ? "Online" : "Offline"
+      },
+      certificates: certsRes.rows,
+      loginHistory: loginsRes.rows
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2809,7 +3198,7 @@ router3.post("/students", async (req, res) => {
       res.status(400).json({ error: "Full Name, Email, and Student ID are required" });
       return;
     }
-    const newId = crypto4.randomUUID();
+    const newId = crypto5.randomUUID();
     const passwordHash = await bcrypt3.hash("welcome123", 10);
     await query(
       `INSERT INTO users (id, email, password_hash, role, is_verified)
@@ -2820,7 +3209,7 @@ router3.post("/students", async (req, res) => {
       `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, avatar_url, completion_pct, is_active)
        VALUES ($1, $2, $3, $4, $5, 'CampusConnect University Network', 'School of Technology', $6, $7, $8, $9, $10, 85, true)`,
       [
-        crypto4.randomUUID(),
+        crypto5.randomUUID(),
         newId,
         fullName,
         studentId,
@@ -2891,7 +3280,7 @@ router3.post("/students/bulk-import", async (req, res) => {
     const defaultPasswordHash = await bcrypt3.hash("welcome123", 10);
     for (const item of validRows) {
       try {
-        const newId = crypto4.randomUUID();
+        const newId = crypto5.randomUUID();
         await query(
           `INSERT INTO users (id, email, password_hash, role, is_verified)
            VALUES ($1, $2, $3, 'student', true)
@@ -2903,7 +3292,7 @@ router3.post("/students/bulk-import", async (req, res) => {
            VALUES ($1, $2, $3, $4, '', 'CampusConnect University Network', 'School of Technology', $5, $6, $7, $8, $9, 80, true)
            ON CONFLICT (student_id) DO UPDATE SET full_name = EXCLUDED.full_name`,
           [
-            crypto4.randomUUID(),
+            crypto5.randomUUID(),
             newId,
             item.name,
             item.studentId,

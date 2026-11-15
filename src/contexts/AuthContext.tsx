@@ -3,6 +3,7 @@ import type { Profile } from '@/types'
 import { UserRole } from '@/types'
 import { apiRequest, setToken, clearToken, getToken } from '@/services/api'
 import { safeParseSkills } from '@/lib/dateUtils'
+import { sendStudentHeartbeat } from '@/services/studentService'
 
 interface AuthContextType {
   currentUser: { uid: string; email: string | null; displayName: string | null; photoURL: string | null } | null
@@ -88,6 +89,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth()
   }, [])
 
+  // Send periodic student heartbeat to maintain active/online telemetry
+  useEffect(() => {
+    if (!currentUser || role !== UserRole.STUDENT) return
+
+    // Initial heartbeat ping
+    sendStudentHeartbeat()
+
+    // Regular heartbeat every 2.5 minutes while tab is active
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        sendStudentHeartbeat()
+      }
+    }, 2.5 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [currentUser, role])
+
   const login = async (email: string, password: string) => {
     const res = await apiRequest<{ token: string; user: any }>('/api/auth/login', {
       method: 'POST',
@@ -153,6 +171,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    } catch {}
     clearToken()
     setCurrentUser(null)
     setUserProfile(null)

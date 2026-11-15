@@ -85,7 +85,13 @@ class FallbackStore {
         bio: 'Campus Ambassador Lead & Executive Director',
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA',
         completion_pct: 100,
-        is_active: true
+        is_active: true,
+        last_login_at: new Date(),
+        last_active_at: new Date(),
+        login_count: 10,
+        last_login_device: 'Windows PC',
+        last_login_browser: 'Chrome',
+        last_login_ip: '127.0.0.1'
       },
       {
         id: 'prof-khushi-kanu',
@@ -103,10 +109,31 @@ class FallbackStore {
         bio: 'Campus Ambassador & Student Representative',
         avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi+Kanu',
         completion_pct: 100,
-        is_active: true
+        is_active: true,
+        last_login_at: new Date(),
+        last_active_at: new Date(),
+        login_count: 5,
+        last_login_device: 'Windows PC',
+        last_login_browser: 'Chrome',
+        last_login_ip: '127.0.0.1'
       }
     ],
     email_tokens: [],
+    student_login_activity: [
+      {
+        id: 'act-khushi-001',
+        user_id: 'u-khushi-kanu',
+        student_id: 'GSA-2026-KK670',
+        login_at: new Date(),
+        logout_at: null,
+        last_active_at: new Date(),
+        device: 'Windows PC',
+        browser: 'Chrome',
+        ip_address: '127.0.0.1',
+        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        created_at: new Date()
+      }
+    ],
     certificates: [
       {
         id: 'cert-khushi-001',
@@ -320,6 +347,72 @@ class FallbackStore {
       return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
     }
 
+    // 7b. INSERT INTO student_login_activity
+    if (lower.startsWith('insert into student_login_activity')) {
+      const [id, user_id, student_id, login_at, last_active_at, device, browser, ip_address, user_agent] = params
+      const newAct = {
+        id: id || 'act-' + Date.now(),
+        user_id,
+        student_id,
+        login_at: login_at || new Date(),
+        logout_at: null,
+        last_active_at: last_active_at || new Date(),
+        device: device || 'Windows PC',
+        browser: browser || 'Chrome',
+        ip_address: ip_address || '127.0.0.1',
+        user_agent: user_agent || '',
+        created_at: new Date()
+      }
+      this.data.student_login_activity = this.data.student_login_activity || []
+      this.data.student_login_activity.unshift(newAct)
+      this.save()
+      return { rows: [newAct], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    // 7c. UPDATE student_login_activity
+    if (lower.startsWith('update student_login_activity')) {
+      this.data.student_login_activity = this.data.student_login_activity || []
+      const [val, uid] = params
+      for (const act of this.data.student_login_activity) {
+        if (act.user_id === uid || act.id === uid) {
+          if (lower.includes('logout_at')) act.logout_at = val || new Date()
+          if (lower.includes('last_active_at')) act.last_active_at = val || new Date()
+        }
+      }
+      this.save()
+      return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    // 7d. SELECT FROM student_login_activity
+    if (lower.includes('from student_login_activity')) {
+      let acts = this.data.student_login_activity || []
+      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null
+      if (param0 && (lower.includes('where user_id') || lower.includes('where student_id'))) {
+        acts = acts.filter(a => a.user_id?.toLowerCase() === param0 || a.student_id?.toLowerCase() === param0)
+      }
+      return { rows: acts, command: 'SELECT', rowCount: acts.length, oid: 0, fields: [] }
+    }
+
+    // 7e. UPDATE profiles
+    if (lower.startsWith('update profiles')) {
+      const uid = params[params.length - 1]
+      const prof = this.data.profiles.find(p => p.user_id === uid || p.id === uid)
+      if (prof) {
+        if (lower.includes('login_count')) {
+          prof.login_count = (prof.login_count || 0) + 1
+          prof.last_login_at = new Date()
+          prof.last_active_at = new Date()
+          if (params[0]) prof.last_login_device = params[0]
+          if (params[1]) prof.last_login_browser = params[1]
+          if (params[2]) prof.last_login_ip = params[2]
+        } else if (lower.includes('last_active_at')) {
+          prof.last_active_at = new Date()
+        }
+      }
+      this.save()
+      return { rows: [], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
+    }
+
     // 8. SELECT FROM certificates (Prioritized before users to prevent JOIN collisions)
     if (lower.includes('from certificates')) {
       let certs = this.data.certificates
@@ -409,7 +502,13 @@ class FallbackStore {
           bio: prof.bio || '',
           avatar_url: prof.avatar_url,
           completion_pct: prof.completion_pct || 85,
-          is_active: prof.is_active ?? true
+          is_active: prof.is_active ?? true,
+          last_login_at: prof.last_login_at || null,
+          last_active_at: prof.last_active_at || null,
+          login_count: prof.login_count || 0,
+          last_login_device: prof.last_login_device || 'Windows PC',
+          last_login_browser: prof.last_login_browser || 'Chrome',
+          last_login_ip: prof.last_login_ip || '127.0.0.1'
         }
       })
       return { rows: combined, command: 'SELECT', rowCount: combined.length, oid: 0, fields: [] }
@@ -557,6 +656,12 @@ export async function runMigration() {
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
     `).catch(() => {})
     console.log('[Migration] Schema migration completed successfully.')
   } catch (err: any) {

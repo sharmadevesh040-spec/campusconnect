@@ -6,6 +6,7 @@ import { query } from '../db'
 import { getFilePath, generateSignedDownloadUrl } from '../storage'
 import { generateCertificatePdfBuffer } from '../storage/pdfGenerator'
 import { getMyCertificatesTool, getCertificateTool } from '../mcp/certificateTools'
+import { recordStudentHeartbeat } from '../services/activityService'
 
 const router = Router()
 
@@ -436,6 +437,17 @@ router.get('/resources', async (_req: AuthRequest, res: Response): Promise<void>
   try {
     const resSql = await query(`SELECT * FROM resources ORDER BY title ASC`)
     res.json(resSql.rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/student/heartbeat (Maintains Online status while student has tab open)
+router.post('/heartbeat', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const studentId = req.user!.id
+    await recordStudentHeartbeat(studentId)
+    res.json({ status: 'ok', activeAt: new Date().toISOString() })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

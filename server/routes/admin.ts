@@ -24,13 +24,38 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
     const studentCountRes = await query(`SELECT count(*)::int FROM users WHERE role = 'student'`)
     const totalStudents = studentCountRes.rows[0]?.count || 0
 
-    const certCountRes = await query(`SELECT count(*)::int FROM certificates WHERE status = 'Valid'`)
-    const certificatesIssued = certCountRes.rows[0]?.count || 0
+    // Active (Online) Students: active within last 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+    const activeStudentsRes = await query(`
+      SELECT count(DISTINCT user_id)::int FROM profiles
+      WHERE last_active_at >= $1
+    `, [fiveMinutesAgo]).catch(() => ({ rows: [{ count: 0 }] }))
+    const activeStudents = activeStudentsRes.rows[0]?.count || 0
 
-    const evtCountRes = await query(
-      `SELECT count(*)::int FROM events WHERE date >= CURRENT_DATE - INTERVAL '1 day'`
-    )
-    const upcomingEvents = evtCountRes.rows[0]?.count || 0
+    // Today's Logins
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const todayLoginsRes = await query(`
+      SELECT count(*)::int FROM student_login_activity
+      WHERE login_at >= $1
+    `, [startOfToday]).catch(() => ({ rows: [{ count: 0 }] }))
+    const todayLogins = todayLoginsRes.rows[0]?.count || 0
+
+    // Total Logins across all students
+    const totalLoginsRes = await query(`
+      SELECT COALESCE(SUM(login_count), 0)::int as total FROM profiles
+    `).catch(() => ({ rows: [{ total: 0 }] }))
+    const totalLogins = totalLoginsRes.rows[0]?.total || 0
+
+    // Total Certificates
+    const certCountRes = await query(`SELECT count(*)::int FROM certificates WHERE status = 'Valid'`)
+    const totalCertificates = certCountRes.rows[0]?.count || 0
+
+    // Certificates Uploaded Today
+    const todayCertsRes = await query(`
+      SELECT count(*)::int FROM certificates WHERE created_at >= $1
+    `, [startOfToday]).catch(() => ({ rows: [{ count: 0 }] }))
+    const todayCertificates = todayCertsRes.rows[0]?.count || 0
 
     // Real student registration growth from PostgreSQL
     const growthRes = await query(`
@@ -44,45 +69,180 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
       ? growthRes.rows
       : [{ month: new Date().toLocaleString('en-US', { month: 'short' }), count: totalStudents }]
 
+    // Recent 6 Student Login Activities
+    const recentActivityRes = await query(`
+      SELECT a.*, p.full_name as "studentName", u.email as "studentEmail"
+      FROM student_login_activity a
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN profiles p ON a.user_id = p.user_id
+      ORDER BY a.login_at DESC
+      LIMIT 6
+    `).catch(() => ({ rows: [] }))
+
     res.json({
       metrics: {
         totalStudents,
-        certificatesIssued,
-        upcomingEvents
+        activeStudents,
+        todayLogins,
+        totalLogins,
+        totalCertificates,
+        todayCertificates,
+        certificatesIssued: totalCertificates
       },
       charts: {
         studentGrowth
-      }
+      },
+      recentActivity: recentActivityRes.rows
     })
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch admin metrics' })
   }
 })
 
-// GET /api/admin/students
-router.get('/students', async (req: AuthRequest, res: Response): Promise<void> => {
+// GET /api/admin/students & /api/admin/student-activity (Comprehensive activity and tracking)
+router.get(['/students', '/student-activity'], async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const q = ((req.query.q as string) || '').toLowerCase()
+    const q = ((req.query.q as string) || '').toLowerCase().trim()
+    const filter = ((req.query.filter as string) || 'all').toLowerCase().trim()
+    const sort = ((req.query.sort as string) || 'latest').toLowerCase().trim()
+
     let sql = `
       SELECT u.id, u.email, u.created_at as "createdAt",
-             p.full_name as name, p.student_id as "studentId", p.university,
-             p.college, p.course, p.branch, p.year, p.phone,
+             p.id as "profileId", p.full_name as name, p.student_id as "studentId",
+             p.university, p.college, p.course, p.branch, p.year, p.phone,
              p.completion_pct as "completionPct", p.is_active as "isActive",
-             p.avatar_url as "avatarUrl"
+             p.avatar_url as "avatarUrl",
+             p.last_login_at as "lastLoginAt",
+             p.last_active_at as "lastActiveAt",
+             COALESCE(p.login_count, 0) as "loginCount",
+             p.last_login_device as "device",
+             p.last_login_browser as "browser",
+             p.last_login_ip as "ipAddress",
+             (SELECT count(*)::int FROM certificates c WHERE c.student_id = u.id OR c.student_id = p.student_id OR c.student_id = u.email) as "certificatesCount"
       FROM users u
       LEFT JOIN profiles p ON u.id = p.user_id
-      WHERE (p.id IS NOT NULL OR u.role IN ('student', 'super_admin', 'admin'))
+      WHERE u.role = 'student'
     `
     const params: any[] = []
 
     if (q) {
-      sql += ` AND (LOWER(p.full_name) LIKE $1 OR LOWER(u.email) LIKE $1 OR LOWER(p.student_id) LIKE $1)`
       params.push(`%${q}%`)
+      sql += ` AND (LOWER(p.full_name) LIKE $${params.length} OR LOWER(u.email) LIKE $${params.length} OR LOWER(p.student_id) LIKE $${params.length})`
     }
 
-    sql += ` ORDER BY u.created_at DESC`
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const startOfWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+    if (filter === 'online') {
+      params.push(fiveMinutesAgo)
+      sql += ` AND p.last_active_at >= $${params.length}`
+    } else if (filter === 'active' || filter === 'recently_active') {
+      params.push(twentyFourHoursAgo)
+      sql += ` AND p.last_active_at >= $${params.length}`
+    } else if (filter === 'today') {
+      params.push(startOfToday)
+      sql += ` AND p.last_login_at >= $${params.length}`
+    } else if (filter === 'week') {
+      params.push(startOfWeek)
+      sql += ` AND p.last_login_at >= $${params.length}`
+    }
+
+    if (sort === 'oldest') {
+      sql += ` ORDER BY p.last_login_at ASC NULLS LAST`
+    } else if (sort === 'name') {
+      sql += ` ORDER BY p.full_name ASC`
+    } else if (sort === 'logins') {
+      sql += ` ORDER BY p.login_count DESC, p.last_login_at DESC`
+    } else {
+      sql += ` ORDER BY p.last_login_at DESC NULLS LAST, u.created_at DESC`
+    }
+
     const resSql = await query(sql, params)
-    res.json(resSql.rows)
+    
+    // Calculate live Online status (within 5 minutes)
+    const nowTime = Date.now()
+    const mapped = resSql.rows.map(row => {
+      const lastActiveTime = row.lastActiveAt ? new Date(row.lastActiveAt).getTime() : 0
+      const isOnline = (nowTime - lastActiveTime) <= 5 * 60 * 1000
+      return {
+        ...row,
+        status: isOnline ? 'Online' : 'Offline',
+        device: row.device || 'Windows PC',
+        browser: row.browser || 'Chrome',
+        ipAddress: row.ipAddress || '127.0.0.1'
+      }
+    })
+
+    res.json(mapped)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/admin/students/:id/details (Comprehensive student drilldown with certificates and login history)
+router.get('/students/:id/details', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const studentIdParam = req.params.id
+
+    // Fetch user and profile
+    const userRes = await query(`
+      SELECT u.id, u.email, u.created_at as "createdAt",
+             p.id as "profileId", p.full_name as name, p.student_id as "studentId",
+             p.university, p.college, p.course, p.branch, p.year, p.semester, p.phone,
+             p.bio, p.skills, p.avatar_url as "avatarUrl", p.completion_pct as "completionPct",
+             p.is_active as "isActive",
+             p.last_login_at as "lastLoginAt",
+             p.last_active_at as "lastActiveAt",
+             COALESCE(p.login_count, 0) as "loginCount",
+             p.last_login_device as "device",
+             p.last_login_browser as "browser",
+             p.last_login_ip as "ipAddress"
+      FROM users u
+      LEFT JOIN profiles p ON u.id = p.user_id
+      WHERE u.id = $1 OR p.user_id = $1 OR p.student_id = $1 OR u.email = $1
+    `, [studentIdParam])
+
+    if (userRes.rows.length === 0) {
+      res.status(404).json({ error: 'Student not found' })
+      return
+    }
+
+    const student = userRes.rows[0]
+    const nowTime = Date.now()
+    const lastActiveTime = student.lastActiveAt ? new Date(student.lastActiveAt).getTime() : 0
+    const isOnline = (nowTime - lastActiveTime) <= 5 * 60 * 1000
+
+    // Fetch student certificates
+    const certsRes = await query(`
+      SELECT id, certificate_id as "certificateId", title, certificate_name as "certificateName",
+             type, certificate_type as "certificateType", program, issue_date as "issueDate",
+             file_url as "fileUrl", status, created_at as "createdAt"
+      FROM certificates
+      WHERE student_id = $1 OR student_id = $2 OR student_id = $3
+      ORDER BY issue_date DESC
+    `, [student.id, student.studentId, student.email])
+
+    // Fetch student's recent login history
+    const loginsRes = await query(`
+      SELECT id, login_at as "loginAt", logout_at as "logoutAt", last_active_at as "lastActiveAt",
+             device, browser, ip_address as "ipAddress", user_agent as "userAgent"
+      FROM student_login_activity
+      WHERE user_id = $1 OR student_id = $2
+      ORDER BY login_at DESC
+      LIMIT 25
+    `, [student.id, student.studentId])
+
+    res.json({
+      student: {
+        ...student,
+        status: isOnline ? 'Online' : 'Offline'
+      },
+      certificates: certsRes.rows,
+      loginHistory: loginsRes.rows
+    })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

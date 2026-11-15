@@ -108,3 +108,70 @@ export async function bulkImportStudents(csvData: string): Promise<{
     body: JSON.stringify({ csvData })
   })
 }
+
+export interface StudentActivityItem {
+  id: string
+  profileId?: string
+  name: string
+  email: string
+  studentId: string
+  university: string
+  college: string
+  course: string
+  branch: string
+  year: number
+  phone?: string
+  avatarUrl?: string
+  lastLoginAt?: string | null
+  lastActiveAt?: string | null
+  loginCount: number
+  status: 'Online' | 'Offline'
+  device: string
+  browser: string
+  ipAddress: string
+  certificatesCount: number
+  createdAt: string
+}
+
+export interface StudentDetailsResponse {
+  student: StudentActivityItem & {
+    bio?: string
+    skills?: string[]
+    isActive: boolean
+    completionPct: number
+  }
+  certificates: any[]
+  loginHistory: {
+    id: string
+    loginAt: string
+    logoutAt?: string | null
+    lastActiveAt: string
+    device: string
+    browser: string
+    ipAddress: string
+  }[]
+}
+
+export async function getStudentActivity(params?: {
+  q?: string
+  filter?: string
+  sort?: string
+}): Promise<StudentActivityItem[]> {
+  const query = new URLSearchParams()
+  if (params?.q) query.set('q', params.q)
+  if (params?.filter) query.set('filter', params.filter)
+  if (params?.sort) query.set('sort', params.sort)
+  
+  const queryString = query.toString() ? `?${query.toString()}` : ''
+  return apiRequest<StudentActivityItem[]>(`/api/admin/student-activity${queryString}`)
+}
+
+export async function getStudentDetails(id: string): Promise<StudentDetailsResponse> {
+  return apiRequest<StudentDetailsResponse>(`/api/admin/students/${encodeURIComponent(id)}/details`)
+}
+
+export async function sendStudentHeartbeat(): Promise<void> {
+  try {
+    await apiRequest('/api/student/heartbeat', { method: 'POST' })
+  } catch {}
+}

@@ -37,6 +37,14 @@ export function generateToken(user: AuthenticatedUser): string {
   )
 }
 
+export function verifyToken(token: string): AuthenticatedUser | null {
+  try {
+    return jwt.verify(token, getJwtSecret()) as AuthenticatedUser
+  } catch {
+    return null
+  }
+}
+
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
