@@ -377,7 +377,17 @@ var FallbackStore = class {
     announcements: [],
     notifications: [],
     audit_logs: [],
-    resources: []
+    resources: [
+      {
+        id: "res-interview-questions",
+        title: "Interview questions",
+        description: "Campus Ambassador discovery questions for syllabus, notes, and Google Gemini Study Notebooks.",
+        category: "Interview Preparation",
+        type: "Document",
+        url: "#interview-questions",
+        created_at: /* @__PURE__ */ new Date()
+      }
+    ]
   };
   storePath = path.join(os.tmpdir(), "campusconnect_fallback_store.json");
   init() {
@@ -993,12 +1003,27 @@ async function seedDatabase() {
   const defaultEvents = [];
   const defaultTasks = [];
   const defaultAnnouncements = [];
-  const defaultResources = [];
+  const defaultResources = [
+    {
+      id: "res-interview-questions",
+      title: "Interview questions",
+      description: "Campus Ambassador discovery questions for syllabus, notes, and Google Gemini Study Notebooks.",
+      category: "Interview Preparation",
+      type: "Document",
+      url: "#interview-questions"
+    }
+  ];
   for (const u of defaultUsers) {
     const idx = fallbackStore.data.users.findIndex((existing) => existing.email === u.email);
     if (idx === -1) {
       fallbackStore.data.users.push(u);
       fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: "prof-" + u.id });
+    }
+  }
+  for (const r of defaultResources) {
+    const idx = fallbackStore.data.resources.findIndex((existing) => existing.id === r.id);
+    if (idx === -1) {
+      fallbackStore.data.resources.push({ ...r, created_at: /* @__PURE__ */ new Date() });
     }
   }
   try {

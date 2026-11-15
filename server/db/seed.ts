@@ -63,7 +63,16 @@ export async function seedDatabase() {
   const defaultEvents: any[] = []
   const defaultTasks: any[] = []
   const defaultAnnouncements: any[] = []
-  const defaultResources: any[] = []
+  const defaultResources = [
+    {
+      id: 'res-interview-questions',
+      title: 'Interview questions',
+      description: 'Campus Ambassador discovery questions for syllabus, notes, and Google Gemini Study Notebooks.',
+      category: 'Interview Preparation',
+      type: 'Document',
+      url: '#interview-questions'
+    }
+  ]
 
   // Safely seed Fallback Store without wiping registered users
   for (const u of defaultUsers) {
@@ -71,6 +80,13 @@ export async function seedDatabase() {
     if (idx === -1) {
       fallbackStore.data.users.push(u)
       fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: 'prof-' + u.id })
+    }
+  }
+
+  for (const r of defaultResources) {
+    const idx = fallbackStore.data.resources.findIndex(existing => existing.id === r.id)
+    if (idx === -1) {
+      fallbackStore.data.resources.push({ ...r, created_at: new Date() })
     }
   }
 

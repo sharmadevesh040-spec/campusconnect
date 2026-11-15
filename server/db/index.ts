@@ -159,7 +159,17 @@ class FallbackStore {
     announcements: [],
     notifications: [],
     audit_logs: [],
-    resources: []
+    resources: [
+      {
+        id: 'res-interview-questions',
+        title: 'Interview questions',
+        description: 'Campus Ambassador discovery questions for syllabus, notes, and Google Gemini Study Notebooks.',
+        category: 'Interview Preparation',
+        type: 'Document',
+        url: '#interview-questions',
+        created_at: new Date()
+      }
+    ]
   }
 
   private storePath = path.join(os.tmpdir(), 'campusconnect_fallback_store.json')
