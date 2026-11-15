@@ -385,7 +385,7 @@ class FallbackStore {
 
     // 7d. SELECT FROM student_login_activity
     if (lower.includes('from student_login_activity')) {
-      if (lower.includes('count(*)')) {
+      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
         const threshold = params[0] ? new Date(params[0]) : new Date(new Date().setHours(0, 0, 0, 0))
         const todayCount = (this.data.student_login_activity || []).filter(a => a.login_at && new Date(a.login_at) >= threshold).length
         return { rows: [{ count: todayCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
@@ -409,12 +409,12 @@ class FallbackStore {
 
     // 7e. SELECT FROM profiles
     if (lower.includes('from profiles')) {
-      if (lower.includes('count(distinct user_id)') || lower.includes('count(*)')) {
+      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
         const threshold = params[0] ? new Date(params[0]) : new Date(Date.now() - 5 * 60 * 1000)
         const onlineCount = this.data.profiles.filter(p => p.last_active_at && new Date(p.last_active_at) >= threshold).length
         return { rows: [{ count: onlineCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
       }
-      if (lower.includes('sum(login_count)')) {
+      if (lower.startsWith('select coalesce(sum(') || lower.startsWith('select sum(') || lower.includes('sum(login_count)')) {
         const total = this.data.profiles.reduce((sum, p) => sum + (p.login_count || 0), 0)
         return { rows: [{ total }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
       }
@@ -442,7 +442,7 @@ class FallbackStore {
 
     // 8. SELECT FROM certificates (Prioritized before users to prevent JOIN collisions)
     if (lower.includes('from certificates')) {
-      if (lower.includes('count(*)')) {
+      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
         if (lower.includes('created_at >=')) {
           const threshold = params[0] ? new Date(params[0]) : new Date(new Date().setHours(0, 0, 0, 0))
           const todayCerts = this.data.certificates.filter(c => c.created_at && new Date(c.created_at) >= threshold).length
@@ -498,7 +498,7 @@ class FallbackStore {
 
     // 9. SELECT FROM users / profiles
     if (lower.includes('from users')) {
-      if (lower.includes('count(*)')) {
+      if (lower.startsWith('select count(') || lower.startsWith('select count*')) {
         const studentCount = this.data.users.filter(u => u.role === 'student').length
         return { rows: [{ count: studentCount }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }
       }
@@ -521,10 +521,15 @@ class FallbackStore {
         return { rows, command: 'SELECT', rowCount: rows.length, oid: 0, fields: [] }
       }
 
-      const emailParam = params[0]?.toLowerCase().trim()
+      const emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null
       let matches = this.data.users
-      if (emailParam && !lower.includes('where u.role =')) {
-        matches = matches.filter(u => u.email?.toLowerCase().trim() === emailParam || u.id === emailParam)
+      if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'")) {
+        matches = matches.filter(u => {
+          const prof = this.data.profiles.find(p => p.user_id === u.id)
+          return u.email?.toLowerCase().trim() === emailParam ||
+                 u.id?.toLowerCase() === emailParam ||
+                 prof?.student_id?.toLowerCase() === emailParam
+        })
       }
       if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
         matches = matches.filter(u => u.role === 'student')
