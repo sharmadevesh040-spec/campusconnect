@@ -33,7 +33,7 @@ export function generateToken(user: AuthenticatedUser): string {
       studentId: user.studentId
     },
     getJwtSecret(),
-    { expiresIn: '7d' }
+    { expiresIn: '90d' }
   )
 }
 

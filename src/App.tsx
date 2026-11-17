@@ -61,9 +61,13 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: 
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { currentUser, loading } = useAuth()
+  const { currentUser, userProfile, loading } = useAuth()
   if (loading) return <LoadingSpinner fullScreen />
-  if (currentUser) return <Navigate to="/student/dashboard" replace />
+  if (currentUser) {
+    const email = (userProfile?.email || currentUser?.email)?.toLowerCase().trim()
+    const isAdmin = email === AUTHORIZED_ADMIN_EMAIL.toLowerCase()
+    return <Navigate to={isAdmin ? "/admin/dashboard" : "/student/dashboard"} replace />
+  }
   return <>{children}</>
 }
 
