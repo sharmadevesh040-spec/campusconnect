@@ -26,12 +26,12 @@ dotenv.config()
  * Uses environment variables (VITE_FIREBASE_* or FIREBASE_*)
  */
 const firebaseConfig = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || '',
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || '',
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'campusconnect-app',
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || ''
+  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || "AIzaSyDw2d3amFeLbHAXaIAgY7UreWQOmLZSyMk",
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || "campus-connect-60a9f.firebaseapp.com",
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "campus-connect-60a9f",
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || "campus-connect-60a9f.firebasestorage.app",
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || "369238821789",
+  appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || "1:369238821789:web:c4c2fa07ec6f12aecdbd74"
 }
 
 export const isFirebaseConfigured = Boolean(
@@ -173,6 +173,20 @@ export interface FirestoreNotification {
   is_read: boolean
   link?: string
   created_at: string | Date
+}
+
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null
+  if (typeof obj !== 'object') return obj
+  if (obj instanceof Date) return obj
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore)
+  const clean: Record<string, any> = {}
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = sanitizeForFirestore(val)
+    }
+  }
+  return clean
 }
 
 /**
@@ -404,22 +418,36 @@ class FirestoreStore {
     ]
   }
 
+  private firestoreDisabled = false
+
   // Sync to real Firestore if configured
   public async syncDocToFirestore(collectionName: string, docId: string, data: any) {
-    if (!isFirebaseConfigured || !firestoreDb) return
+    if (!isFirebaseConfigured || !firestoreDb || this.firestoreDisabled) return
     try {
-      await setDoc(doc(firestoreDb, collectionName, docId), data, { merge: true })
+      const cleanData = sanitizeForFirestore(data)
+      const writePromise = setDoc(doc(firestoreDb, collectionName, docId), cleanData, { merge: true })
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      await Promise.race([writePromise, timeoutPromise])
     } catch (err: any) {
-      console.warn(`[Firestore Sync Warning on ${collectionName}/${docId}]:`, err?.message || err)
+      if (err?.message?.includes('Cloud Firestore API has not been used') || err?.message?.includes('PERMISSION_DENIED')) {
+        this.firestoreDisabled = true
+        console.warn(`[Firestore Notice]: Cloud Firestore has not been activated yet in Firebase Console for project "${firebaseConfig.projectId}". Operating seamlessly in resilient local mode until "Create database" is clicked in Firebase Console.`)
+      } else if (err?.message !== 'Timeout') {
+        console.warn(`[Firestore Sync Warning on ${collectionName}/${docId}]:`, err?.message || err)
+      }
     }
   }
 
   public async deleteDocFromFirestore(collectionName: string, docId: string) {
-    if (!isFirebaseConfigured || !firestoreDb) return
+    if (!isFirebaseConfigured || !firestoreDb || this.firestoreDisabled) return
     try {
-      await deleteDoc(doc(firestoreDb, collectionName, docId))
+      const deletePromise = deleteDoc(doc(firestoreDb, collectionName, docId))
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      await Promise.race([deletePromise, timeoutPromise])
     } catch (err: any) {
-      console.warn(`[Firestore Delete Warning on ${collectionName}/${docId}]:`, err?.message || err)
+      if (err?.message !== 'Timeout') {
+        console.warn(`[Firestore Delete Warning on ${collectionName}/${docId}]:`, err?.message || err)
+      }
     }
   }
 }

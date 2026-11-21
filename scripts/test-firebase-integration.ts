@@ -61,6 +61,7 @@ async function runTests() {
   console.log(`✅ Resources count: ${resources.rows.length}, sample title: "${resources.rows[0]?.title}"\n`)
 
   console.log('🎉 ALL FIREBASE ARCHITECTURE & DATA LAYER TESTS PASSED WITH 100% SUCCESS!\n')
+  process.exit(0)
 }
 
 runTests().catch(err => {

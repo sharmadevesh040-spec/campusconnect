@@ -114,6 +114,7 @@ async function runStudentFlowTest() {
   console.log('✅ Privacy verified: Stranger cannot see student certificate.\n')
 
   console.log('🎉 ALL END-TO-END FLOW TESTS COMPLETED WITH 100% SUCCESS!\n')
+  process.exit(0)
 }
 
 runStudentFlowTest().catch(err => {
