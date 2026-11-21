@@ -18,10 +18,10 @@ async function runFullSystemCheck() {
   console.log('=====================================================================\n')
 
   // 1. Database & Seed Check
-  console.log('[Check 1] Migrating & Seeding PostgreSQL / Local Fallback Store...')
+  console.log('[Check 1] Migrating & Seeding Firebase Firestore Collections...')
   await runMigration()
   await seedDatabase()
-  console.log('✓ Tables verified: users, profiles, certificates, events, resources, audit_logs, email_tokens\n')
+  console.log('✓ Collections verified: users, students, certificates, events, resources, audit_logs, email_tokens\n')
 
   // 2. Register New Real Student Account (Simulating a fresh student joining)
   console.log('[Check 2] Student Registration Flow...')
@@ -71,7 +71,7 @@ async function runFullSystemCheck() {
   if (!verifyCheck.rows[0]?.is_verified) {
     throw new Error('Verification failed!')
   }
-  console.log('✓ Account is_verified = true in PostgreSQL')
+  console.log('✓ Account is_verified = true in Firebase Firestore')
 
   // 4. Student Authentication & JWT Token Issuance
   console.log('\n[Check 4] Student Token & Session Creation...')

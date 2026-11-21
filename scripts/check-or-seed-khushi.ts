@@ -55,7 +55,7 @@ async function checkOrSeedKhushi() {
         90
       ]
     )
-    console.log('Successfully registered Khushi in PostgreSQL:', { userId, studentId, email })
+    console.log('Successfully registered Khushi in Firebase Firestore:', { userId, studentId, email })
   }
   process.exit(0)
 }

@@ -81,7 +81,7 @@ export default function VerifyEmailPage() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-white">Email Verified on Stage!</h1>
         <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
-          Your student ambassador email address has been confirmed and activated in PostgreSQL.
+          Your student ambassador email address has been confirmed and activated in Firebase Firestore.
         </p>
 
         <div className="pt-4">

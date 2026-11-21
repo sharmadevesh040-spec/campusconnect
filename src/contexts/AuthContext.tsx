@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [role, setRole] = useState<UserRole | null>(() => getInitialRole())
 
-  // Background session sync with PostgreSQL / Vercel API
+  // Background session sync with Firebase Firestore / Vercel API
   const refreshSession = useCallback(async () => {
     const token = getToken()
     if (!token) {

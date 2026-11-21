@@ -32,7 +32,7 @@ function mapCert(item: any): Certificate {
 }
 
 /**
- * Fetch authenticated student's own certificates (PostgreSQL)
+ * Fetch authenticated student's own certificates (Firebase Firestore)
  */
 export async function getCertificates(_studentId?: string): Promise<Certificate[]> {
   try {

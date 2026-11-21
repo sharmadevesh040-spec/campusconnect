@@ -763,7 +763,7 @@ export default function AdminCertificatesPage() {
             Are you sure you want to permanently delete certificate <strong className="font-mono text-red-400">{activeCert?.certificateId}</strong> issued to <strong>{activeCert?.studentName}</strong>?
           </p>
           <p className="text-xs text-red-400 font-medium">
-            This will permanently remove the record from PostgreSQL and delete the PDF file from storage. This action cannot be undone.
+            This will permanently remove the record from Firebase Firestore and delete the PDF file from storage. This action cannot be undone.
           </p>
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-white/10">
             <Button type="button" variant="tactileDark" size="sm" onClick={() => setIsDeleteModalOpen(false)}>

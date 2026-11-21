@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'sharmadevesh040@gmail.com' ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'super_admin'
+      );
+    }
+
+    // Certificates storage: certificates/{studentId}/{certificateId}.pdf
+    match /certificates/{studentId}/{fileName} {
+      // Allow student to read their own certificate or admin to read
+      allow read: if isAuthenticated() && (
+        request.auth.uid == studentId ||
+        request.auth.token.email == studentId ||
+        isAdmin()
+      );
+      // Only admins can upload or delete certificate files
+      allow write: if isAdmin();
+    }
+
+    // Public resources / documents
+    match /documents/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+  }
+}

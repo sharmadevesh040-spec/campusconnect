@@ -168,7 +168,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const { email, password } = parse.data
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Fetch user and profile directly from PostgreSQL
+    // Fetch user and profile directly from Firestore
     const userRes = await query(
       `SELECT u.id, u.email, u.password_hash, u.role, u.is_verified,
               p.id as profile_id, p.full_name, p.student_id, p.phone, p.university, p.college,
@@ -479,7 +479,7 @@ router.post('/verify-email', async (req: Request, res: Response): Promise<void> 
       await query(`UPDATE email_tokens SET used = true WHERE id = $1`, [tokenRes.rows[0].id])
     }
 
-    // Update user is_verified in PostgreSQL / fallback store
+    // Update user is_verified in Firestore
     await query(`UPDATE users SET is_verified = true WHERE LOWER(email) = LOWER($1)`, [normalizedEmail])
 
     // Fetch user & profile to issue session token
@@ -646,7 +646,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   }
 })
 
-// POST /api/auth/reset-password (Reset password with code verified against PostgreSQL)
+// POST /api/auth/reset-password (Reset password with code verified against Firestore)
 router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, code, newPassword } = req.body
@@ -675,7 +675,7 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
       return
     }
 
-    // Hash new password and update in PostgreSQL
+    // Hash new password and update in Firestore
     const passwordHash = await bcrypt.hash(newPassword, 10)
     await query(`UPDATE users SET password_hash = $1 WHERE LOWER(email) = LOWER($2)`, [passwordHash, normalizedEmail])
 

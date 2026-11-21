@@ -151,7 +151,7 @@ export async function uploadCertificateTool(params: UploadCertificateParams) {
     }
   }
 
-  // 7. Insert metadata into PostgreSQL with rollback on failure
+  // 7. Insert metadata into Firestore with rollback on failure
   try {
     const fileUrl = `/api/student/certificates/${certIdCode}/download`
     const insertRes = await query(

@@ -2,6 +2,8 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { firebaseApp, isFirebaseConfigured } from '../db/firestore'
 
 const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV)
 const UPLOAD_DIR = isServerless ? path.join(os.tmpdir(), 'uploads') : path.resolve(process.cwd(), 'uploads')
@@ -29,39 +31,79 @@ export interface StoredFile {
 }
 
 /**
- * Saves a certificate PDF buffer to private storage in the structured format:
+ * Saves a certificate PDF buffer to Firebase Storage and local cache:
  * certificates/{student_id}/{certificate_id}.pdf
  */
 export async function saveCertificateFile(
   buffer: Buffer,
   studentId: string,
   certificateId: string
-): Promise<{ fileKey: string; filePath: string; size: number }> {
-  // Sanitize studentId and certificateId for safe filesystem path
+): Promise<{ fileKey: string; filePath: string; fileUrl?: string; size: number }> {
+  // Sanitize studentId and certificateId for safe storage path
   const safeStudentId = String(studentId).replace(/[^a-zA-Z0-9_-]/g, '_')
   const safeCertId = String(certificateId).replace(/[^a-zA-Z0-9_-]/g, '_')
   const fileKey = `certificates/${safeStudentId}/${safeCertId}.pdf`
   const targetPath = path.join(UPLOAD_DIR, fileKey)
 
-  // Ensure student private folder exists
-  const targetDir = path.dirname(targetPath)
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true })
+  // Ensure local folder exists
+  try {
+    const targetDir = path.dirname(targetPath)
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true })
+    }
+    fs.writeFileSync(targetPath, buffer)
+  } catch (err: any) {
+    console.warn('[Storage] Local write notice:', err.message)
   }
 
-  fs.writeFileSync(targetPath, buffer)
+  let fileUrl = `/api/certificates/${safeCertId}/download`
+
+  // Sync to Firebase Storage if configured
+  if (isFirebaseConfigured && firebaseApp) {
+    try {
+      const storageInstance = getStorage(firebaseApp)
+      const storageRef = ref(storageInstance, fileKey)
+      const snapshot = await uploadBytes(storageRef, buffer, {
+        contentType: 'application/pdf',
+        customMetadata: {
+          studentId: safeStudentId,
+          certificateId: safeCertId,
+          uploadedAt: new Date().toISOString()
+        }
+      })
+      fileUrl = await getDownloadURL(snapshot.ref)
+      console.log(`[Firebase Storage] Uploaded certificate ${certificateId} to ${fileKey}`)
+    } catch (err: any) {
+      console.warn('[Firebase Storage] Upload notice (using resilient access):', err.message)
+    }
+  }
 
   return {
     fileKey,
     filePath: targetPath,
+    fileUrl,
     size: buffer.length
   }
 }
 
 /**
- * Safely deletes a certificate file from private storage
+ * Safely deletes a certificate file from Firebase Storage & local cache
  */
-export function deleteCertificateFile(fileKeyOrPath: string): boolean {
+export async function deleteCertificateFile(fileKeyOrPath: string): Promise<boolean> {
+  // Delete from Firebase Storage if configured
+  if (isFirebaseConfigured && firebaseApp) {
+    try {
+      const storageInstance = getStorage(firebaseApp)
+      const cleanKey = fileKeyOrPath.startsWith(UPLOAD_DIR)
+        ? path.relative(UPLOAD_DIR, fileKeyOrPath).replace(/\\/g, '/')
+        : fileKeyOrPath
+      const storageRef = ref(storageInstance, cleanKey)
+      await deleteObject(storageRef)
+    } catch (err: any) {
+      console.warn('[Firebase Storage] Delete notice:', err.message)
+    }
+  }
+
   try {
     const fullPath = fileKeyOrPath.startsWith(UPLOAD_DIR)
       ? fileKeyOrPath
@@ -71,7 +113,7 @@ export function deleteCertificateFile(fileKeyOrPath: string): boolean {
       return true
     }
   } catch (err) {
-    console.warn('[Storage] Failed to delete certificate file:', err)
+    console.warn('[Storage] Failed to delete local certificate file:', err)
   }
   return false
 }
@@ -88,25 +130,41 @@ export async function saveFile(
   const fileKey = `${category}/${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`
   const targetPath = path.join(UPLOAD_DIR, fileKey)
 
-  // Ensure category folder exists
-  const targetDir = path.dirname(targetPath)
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true })
+  try {
+    const targetDir = path.dirname(targetPath)
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true })
+    }
+    fs.writeFileSync(targetPath, buffer)
+  } catch (err: any) {
+    console.warn('[Storage] Local write notice:', err.message)
   }
 
-  fs.writeFileSync(targetPath, buffer)
+  let fileUrl = `/api/storage/files/${fileKey}`
+
+  if (isFirebaseConfigured && firebaseApp) {
+    try {
+      const storageInstance = getStorage(firebaseApp)
+      const storageRef = ref(storageInstance, fileKey)
+      const mime = ext === '.pdf' ? 'application/pdf' : 'application/octet-stream'
+      const snapshot = await uploadBytes(storageRef, buffer, { contentType: mime })
+      fileUrl = await getDownloadURL(snapshot.ref)
+    } catch (err: any) {
+      console.warn('[Firebase Storage] Upload notice:', err.message)
+    }
+  }
 
   return {
     fileKey,
     fileName: originalName,
     mimeType: ext === '.pdf' ? 'application/pdf' : 'application/octet-stream',
     size: buffer.length,
-    fileUrl: `/api/storage/files/${fileKey}`
+    fileUrl
   }
 }
 
 /**
- * Retrieves file path from storage
+ * Retrieves file path from local storage cache
  */
 export function getFilePath(fileKey: string): string | null {
   const fullPath = path.join(UPLOAD_DIR, fileKey)

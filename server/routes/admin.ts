@@ -18,7 +18,7 @@ const upload = multer({ storage: multer.memoryStorage() })
 router.use(requireAuth)
 router.use(requireRole('admin', 'super_admin'))
 
-// GET /api/admin/dashboard (Platform-wide analytics from PostgreSQL)
+// GET /api/admin/dashboard (Platform-wide analytics from Firestore)
 router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const studentCountRes = await query(`SELECT count(*)::int FROM users WHERE role = 'student'`)
@@ -57,7 +57,7 @@ router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void>
     `, [startOfToday]).catch(() => ({ rows: [{ count: 0 }] }))
     const todayCertificates = todayCertsRes.rows[0]?.count || 0
 
-    // Real student registration growth from PostgreSQL
+    // Real student registration growth from Firestore
     const growthRes = await query(`
       SELECT to_char(created_at, 'Mon') as month, count(*)::int as count
       FROM users
@@ -903,7 +903,7 @@ router.post('/announcements', async (req: AuthRequest, res: Response): Promise<v
       [newId, title, message, category, priority, Boolean(isImportant)]
     )
 
-    // Broadcast notification to all active students in PostgreSQL
+    // Broadcast notification to all active students in Firestore
     const studentsRes = await query(`SELECT id FROM users WHERE role = 'student'`)
     for (const s of studentsRes.rows) {
       await query(

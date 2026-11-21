@@ -3,375 +3,153 @@ import express from "express";
 import cors from "cors";
 import dotenv3 from "dotenv";
 
-// server/db/index.ts
-import { Pool } from "pg";
+// server/db/firestore.ts
+import { initializeApp, getApps } from "firebase/app";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  deleteDoc
+} from "firebase/firestore";
 import dotenv from "dotenv";
-import fs from "fs";
-import path from "path";
-import os from "os";
-
-// server/db/schemaSql.ts
-var SCHEMA_SQL = `
--- CampusConnect PostgreSQL Schema
--- Users Table
-CREATE TABLE IF NOT EXISTS users (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'admin', 'super_admin')),
-    is_verified BOOLEAN NOT NULL DEFAULT true,
-    verification_token VARCHAR(255),
-    reset_token VARCHAR(255),
-    reset_token_expiry TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Student Profiles Table
-CREATE TABLE IF NOT EXISTS profiles (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    user_id VARCHAR(100) UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    full_name VARCHAR(255) NOT NULL,
-    student_id VARCHAR(100) UNIQUE NOT NULL,
-    phone VARCHAR(50),
-    university VARCHAR(255) NOT NULL,
-    college VARCHAR(255) NOT NULL,
-    course VARCHAR(100) NOT NULL,
-    branch VARCHAR(100) NOT NULL,
-    year INT NOT NULL DEFAULT 1,
-    semester INT NOT NULL DEFAULT 1,
-    skills TEXT[] DEFAULT '{}',
-    bio TEXT,
-    avatar_url TEXT,
-    completion_pct INT DEFAULT 85,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Interviews Table
-CREATE TABLE IF NOT EXISTS interviews (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    organization VARCHAR(255) NOT NULL DEFAULT 'CampusConnect Program',
-    date DATE NOT NULL,
-    time VARCHAR(50) NOT NULL,
-    duration INT NOT NULL DEFAULT 45,
-    type VARCHAR(50) NOT NULL DEFAULT 'Online',
-    location VARCHAR(255) DEFAULT 'Online Video Room',
-    meeting_link TEXT,
-    interviewer VARCHAR(255) NOT NULL,
-    instructions TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'Scheduled',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Events Table
-CREATE TABLE IF NOT EXISTS events (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    title VARCHAR(255) NOT NULL,
-    description TEXT NOT NULL,
-    date DATE NOT NULL,
-    time VARCHAR(50) NOT NULL,
-    venue VARCHAR(255) NOT NULL,
-    meeting_link TEXT,
-    max_participants INT NOT NULL DEFAULT 100,
-    banner_url TEXT,
-    organizer VARCHAR(255) NOT NULL,
-    registration_deadline TIMESTAMP WITH TIME ZONE NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'Open',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Event Registrations Table
-CREATE TABLE IF NOT EXISTS event_registrations (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    event_id VARCHAR(100) NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    registered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(50) NOT NULL DEFAULT 'Registered',
-    UNIQUE(event_id, student_id)
-);
-
--- Certificates Table
-CREATE TABLE IF NOT EXISTS certificates (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    certificate_id VARCHAR(100) UNIQUE NOT NULL,
-    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    certificate_name VARCHAR(255) NOT NULL,
-    certificate_type VARCHAR(100) NOT NULL DEFAULT 'Ambassador',
-    type VARCHAR(100) NOT NULL DEFAULT 'Ambassador',
-    program VARCHAR(255) NOT NULL,
-    issue_date DATE NOT NULL,
-    description TEXT,
-    storage_key VARCHAR(255),
-    file_key VARCHAR(255),
-    file_path VARCHAR(255),
-    file_url TEXT NOT NULL,
-    qr_code TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'Valid',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Student Tasks Table
-CREATE TABLE IF NOT EXISTS tasks (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    student_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    deadline DATE NOT NULL,
-    priority VARCHAR(50) NOT NULL DEFAULT 'Medium',
-    status VARCHAR(50) NOT NULL DEFAULT 'Pending',
-    attachment_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Announcements Table
-CREATE TABLE IF NOT EXISTS announcements (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    category VARCHAR(50) NOT NULL DEFAULT 'General',
-    priority VARCHAR(50) NOT NULL DEFAULT 'Normal',
-    attachment_url TEXT,
-    is_important BOOLEAN NOT NULL DEFAULT false,
-    publish_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    expiry_date TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Notifications Table
-CREATE TABLE IF NOT EXISTS notifications (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    type VARCHAR(50) NOT NULL DEFAULT 'system',
-    is_read BOOLEAN NOT NULL DEFAULT false,
-    link VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Resources Table
-CREATE TABLE IF NOT EXISTS resources (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    category VARCHAR(100) NOT NULL,
-    file_url TEXT NOT NULL,
-    file_type VARCHAR(50) NOT NULL,
-    file_size VARCHAR(50),
-    is_downloadable BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Audit Logs Table
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    user_id VARCHAR(100),
-    action VARCHAR(100) NOT NULL,
-    resource VARCHAR(100) NOT NULL,
-    resource_id VARCHAR(100),
-    metadata JSONB,
-    ip_address VARCHAR(50),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Email Tokens Table (for verification & OTPs)
-CREATE TABLE IF NOT EXISTS email_tokens (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    email VARCHAR(255) NOT NULL,
-    token VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL, -- 'verification', 'password_reset', 'login_otp'
-    used BOOLEAN NOT NULL DEFAULT false,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Student Login Activity Table
-CREATE TABLE IF NOT EXISTS student_login_activity (
-    id VARCHAR(100) PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    student_id VARCHAR(100),
-    login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    logout_at TIMESTAMP WITH TIME ZONE,
-    last_active_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    device VARCHAR(100) DEFAULT 'Unknown Device',
-    browser VARCHAR(100) DEFAULT 'Unknown Browser',
-    ip_address VARCHAR(100),
-    user_agent TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_login_activity_user_id ON student_login_activity(user_id);
-CREATE INDEX IF NOT EXISTS idx_login_activity_login_at ON student_login_activity(login_at DESC);
-
--- Safe migrations for newly added columns if table already exists
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS title VARCHAR(255);
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS type VARCHAR(100) DEFAULT 'Participation';
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
-ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
-
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
-`;
-
-// server/db/index.ts
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 dotenv.config();
-var DATABASE_URL = process.env.DATABASE_URL;
-var pool = null;
-if (DATABASE_URL && !DATABASE_URL.includes("localhost") && process.env.VERCEL) {
-  try {
-    pool = new Pool({
-      connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 5,
-      idleTimeoutMillis: 3e4,
-      connectionTimeoutMillis: 1e4
-    });
-    console.log("[PostgreSQL] Initialized remote Pool for Vercel.");
-  } catch (err) {
-    console.warn("[PostgreSQL] Failed to initialize remote Pool:", err);
-    pool = null;
-  }
-} else if (DATABASE_URL && (!process.env.VERCEL || !DATABASE_URL.includes("localhost"))) {
-  try {
-    pool = new Pool({
-      connectionString: DATABASE_URL,
-      ssl: DATABASE_URL.includes("neon.tech") || DATABASE_URL.includes("sslmode=require") ? { rejectUnauthorized: false } : void 0,
-      max: 10,
-      idleTimeoutMillis: 3e4,
-      connectionTimeoutMillis: 1e4
-    });
-    console.log("[PostgreSQL] Connected to database via Pool.");
-  } catch (err) {
-    console.warn("[PostgreSQL] Failed to initialize pg Pool:", err);
-    pool = null;
-  }
-} else {
-  console.log("[PostgreSQL] No remote DATABASE_URL configured for Vercel. Running resilient serverless store.");
+var firebaseConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || "",
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || "",
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "campusconnect-app",
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || ""
+};
+var isFirebaseConfigured = Boolean(
+  firebaseConfig.apiKey && firebaseConfig.apiKey !== "your_api_key_here" && firebaseConfig.projectId && firebaseConfig.projectId !== "your_project_id"
+);
+var firebaseApp;
+var firestoreDb;
+try {
+  firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  firestoreDb = getFirestore(firebaseApp);
+  console.log("[Firebase] Cloud Firestore initialized successfully.");
+} catch (err) {
+  console.warn("[Firebase] Initialization notice (using resilient local Firestore store):", err);
 }
-var FallbackStore = class {
-  data = {
-    users: [
-      {
-        id: "a3a4c0bc-4df8-491d-be3c-4f1e92128e61",
-        email: "sharmadevesh040@gmail.com",
-        password_hash: "$2b$10$uzfyZvGuyYYALP20A53/jeS42Ltvmtvjsdard3JSTDDFVsNd8pXOO",
-        // Devesh@09 hash
-        role: "super_admin",
-        is_verified: true,
-        created_at: /* @__PURE__ */ new Date()
-      },
-      {
-        id: "u-khushi-kanu",
-        email: "khushi.kanu123@gmail.com",
-        password_hash: "$2b$10$UQ0pxoOWSzjWi1FQBAblwunwTY/L7vFdZPYvXYkLigHVUVSyRzcrW",
-        // PAPA@123 hash
-        role: "student",
-        is_verified: true,
-        created_at: /* @__PURE__ */ new Date()
-      }
-    ],
-    profiles: [
-      {
-        id: "prof-super-admin",
-        user_id: "a3a4c0bc-4df8-491d-be3c-4f1e92128e61",
-        full_name: "DEVESH SHARMA",
-        student_id: "GSA-2026-999",
-        phone: "+91 9876543210",
-        university: "Delhi Technological University",
-        college: "School of Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 4,
-        semester: 7,
-        skills: ["Student Ambassador", "Leadership", "Cloud Architecture"],
-        bio: "Campus Ambassador Lead & Executive Director",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH+SHARMA",
-        completion_pct: 100,
-        is_active: true,
-        last_login_at: /* @__PURE__ */ new Date(),
-        last_active_at: /* @__PURE__ */ new Date(),
-        login_count: 10,
-        last_login_device: "Windows PC",
-        last_login_browser: "Chrome",
-        last_login_ip: "127.0.0.1"
-      },
-      {
-        id: "prof-khushi-kanu",
-        user_id: "u-khushi-kanu",
-        full_name: "Khushi Kanu",
-        student_id: "GSA-2026-KK670",
-        phone: "+91 98765 43211",
-        university: "Delhi Technological University",
-        college: "Faculty of Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 2,
-        semester: 3,
-        skills: ["Student Ambassador", "Leadership", "Community Outreach"],
-        bio: "Campus Ambassador & Student Representative",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi+Kanu",
-        completion_pct: 100,
-        is_active: true,
-        last_login_at: /* @__PURE__ */ new Date(),
-        last_active_at: /* @__PURE__ */ new Date(),
-        login_count: 5,
-        last_login_device: "Windows PC",
-        last_login_browser: "Chrome",
-        last_login_ip: "127.0.0.1"
-      }
-    ],
-    email_tokens: [],
-    student_login_activity: [
-      {
-        id: "act-khushi-001",
-        user_id: "u-khushi-kanu",
-        student_id: "GSA-2026-KK670",
-        login_at: /* @__PURE__ */ new Date(),
-        logout_at: null,
-        last_active_at: /* @__PURE__ */ new Date(),
-        device: "Windows PC",
-        browser: "Chrome",
-        ip_address: "127.0.0.1",
-        user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        created_at: /* @__PURE__ */ new Date()
-      }
-    ],
-    certificates: [
-      {
-        id: "cert-khushi-001",
-        certificate_id: "CERT-2026-KK670",
-        student_id: "khushi.kanu123@gmail.com",
-        title: "Google Student Ambassador Certificate",
-        certificate_name: "Google Student Ambassador Certificate",
-        type: "Ambassador",
-        program: "Google Student Ambassador Program 2026",
-        issue_date: "2026-11-14",
-        description: "Awarded for outstanding leadership, active campus engagement, and peer mentorship in the student ambassador community.",
-        file_path: "uploads/certificates/GSA-2026-915963/CERT-2026-KK670.pdf",
-        file_key: "certificates/GSA-2026-915963/CERT-2026-KK670.pdf",
-        file_url: "/api/student/certificates/CERT-2026-KK670/download",
-        status: "Valid",
-        created_at: /* @__PURE__ */ new Date()
-      }
-    ],
+var FirestoreStore = class {
+  collections = {
+    users: [],
+    students: [],
+    admins: [],
+    certificates: [],
+    loginActivity: [],
+    events: [],
+    eventRegistrations: [],
+    resources: [],
+    notifications: [],
+    announcements: [],
     interviews: [],
-    events: [
+    emailTokens: [],
+    auditLogs: []
+  };
+  constructor() {
+    this.seedDefaultData();
+  }
+  seedDefaultData() {
+    const superPass = bcrypt.hashSync("Devesh@09", 10);
+    const studentPass = bcrypt.hashSync("PAPA@123", 10);
+    const superAdminUser = {
+      id: "a3a4c0bc-4df8-491d-be3c-4f1e92128e61",
+      email: "sharmadevesh040@gmail.com",
+      password_hash: superPass,
+      role: "super_admin",
+      is_verified: true,
+      created_at: /* @__PURE__ */ new Date("2026-11-01T00:00:00.000Z")
+    };
+    const superAdminProfile = {
+      id: "prof-super-admin",
+      user_id: superAdminUser.id,
+      full_name: "DEVESH SHARMA",
+      student_id: "GSA-2026-999",
+      phone: "+91 98765 43210",
+      university: "Delhi Technological University",
+      college: "School of Engineering",
+      course: "B.Tech",
+      branch: "Computer Science",
+      year: 1,
+      semester: 1,
+      skills: ["Student Ambassador", "Leadership", "System Administrator"],
+      bio: "Designated Sole Super Administrator of CampusConnect.",
+      avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA",
+      completion_pct: 100,
+      is_active: true,
+      login_count: 24,
+      last_login_at: /* @__PURE__ */ new Date(),
+      last_active_at: /* @__PURE__ */ new Date(),
+      created_at: /* @__PURE__ */ new Date("2026-11-01T00:00:00.000Z")
+    };
+    const studentUser = {
+      id: "u-khushi-kanu",
+      email: "khushi.kanu123@gmail.com",
+      password_hash: studentPass,
+      role: "student",
+      is_verified: true,
+      created_at: /* @__PURE__ */ new Date("2026-11-10T00:00:00.000Z")
+    };
+    const studentProfile = {
+      id: "prof-khushi-kanu",
+      user_id: studentUser.id,
+      full_name: "Khushi Kanu",
+      student_id: "GSA-2026-KK670",
+      phone: "+91 98765 43211",
+      university: "Delhi Technological University",
+      college: "Faculty of Engineering",
+      course: "B.Tech",
+      branch: "Computer Science",
+      year: 2,
+      semester: 3,
+      skills: ["Student Ambassador", "Leadership", "Community Outreach"],
+      bio: "Campus Ambassador & Student Representative",
+      avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu",
+      completion_pct: 100,
+      is_active: true,
+      login_count: 8,
+      last_login_at: /* @__PURE__ */ new Date(),
+      last_active_at: /* @__PURE__ */ new Date(),
+      created_at: /* @__PURE__ */ new Date("2026-11-10T00:00:00.000Z")
+    };
+    const studentUserAlias = {
+      id: "u-khushi-alias",
+      email: "khushi@gmail.com",
+      password_hash: bcrypt.hashSync("Password@123", 10),
+      role: "student",
+      is_verified: true,
+      created_at: /* @__PURE__ */ new Date("2026-11-10T00:00:00.000Z")
+    };
+    const studentProfileAlias = {
+      id: "prof-khushi-alias",
+      user_id: studentUserAlias.id,
+      full_name: "Khushi Sharma",
+      student_id: "GSA-2026-KH045",
+      phone: "+91 98765 43212",
+      university: "Delhi Technological University",
+      college: "Faculty of Engineering",
+      course: "B.Tech",
+      branch: "Computer Science",
+      year: 2,
+      semester: 3,
+      skills: ["Student Ambassador", "Leadership", "Community Outreach"],
+      bio: "Campus Ambassador & Student Representative",
+      avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Sharma",
+      completion_pct: 100,
+      is_active: true,
+      login_count: 5,
+      last_login_at: /* @__PURE__ */ new Date(),
+      last_active_at: /* @__PURE__ */ new Date(),
+      created_at: /* @__PURE__ */ new Date("2026-11-10T00:00:00.000Z")
+    };
+    this.collections.users = [superAdminUser, studentUser, studentUserAlias];
+    this.collections.students = [superAdminProfile, studentProfile, studentProfileAlias];
+    this.collections.events = [
       {
         id: "evt-game-on-night-2026",
         title: "Month's Brief \u2014 Game On Night : Imagine The Impossible",
@@ -385,443 +163,400 @@ var FallbackStore = class {
         organizer: "Campus Ambassador Lead",
         registration_deadline: "2026-11-20T19:30:00.000Z",
         status: "Open",
-        created_at: /* @__PURE__ */ new Date(),
-        updated_at: /* @__PURE__ */ new Date()
+        created_at: /* @__PURE__ */ new Date()
       }
-    ],
-    event_registrations: [],
-    tasks: [],
-    announcements: [],
-    notifications: [],
-    audit_logs: [],
-    resources: [
+    ];
+    this.collections.resources = [
       {
         id: "res-interview-questions",
         title: "Interview questions",
         description: "Campus Ambassador discovery questions for syllabus, notes, and Google Gemini Study Notebooks.",
         category: "Interview Preparation",
-        type: "Document",
-        url: "#interview-questions",
+        file_url: "#interview-questions",
+        file_type: "Document",
+        is_downloadable: true,
         created_at: /* @__PURE__ */ new Date()
       }
-    ]
-  };
-  storePath = path.join(os.tmpdir(), "campusconnect_fallback_store.json");
-  init() {
-    try {
-      if (fs.existsSync(this.storePath)) {
-        const raw = fs.readFileSync(this.storePath, "utf-8");
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          for (const key of Object.keys(parsed)) {
-            if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
-              if (key === "users") {
-                for (const u of parsed.users) {
-                  if (!this.data.users.some((existing) => existing.email?.toLowerCase().trim() === u.email?.toLowerCase().trim() || existing.id === u.id)) {
-                    this.data.users.push(u);
-                  }
-                }
-              } else if (key === "profiles") {
-                for (const p of parsed.profiles) {
-                  if (!this.data.profiles.some((existing) => existing.user_id === p.user_id || existing.id === p.id)) {
-                    this.data.profiles.push(p);
-                  }
-                }
-              } else {
-                this.data[key] = parsed[key];
-              }
-            }
-          }
-        }
+    ];
+    this.collections.certificates = [
+      {
+        id: "cert-sample-01",
+        certificate_id: "GSA-2026-000123",
+        student_id: studentUser.id,
+        title: "Google Student Ambassador 2026",
+        certificate_name: "Google Student Ambassador \u2014 Leadership Excellence",
+        certificate_type: "Ambassador",
+        type: "Ambassador",
+        program: "Campus Ambassador Leadership Program 2026",
+        issue_date: "2026-11-14",
+        description: "Awarded for exemplary student leadership and campus community activation.",
+        storage_key: `certificates/${studentUser.id}/GSA-2026-000123.pdf`,
+        file_key: `certificates/${studentUser.id}/GSA-2026-000123.pdf`,
+        file_path: `certificates/${studentUser.id}/GSA-2026-000123.pdf`,
+        file_url: `/api/certificates/GSA-2026-000123/download`,
+        status: "Valid",
+        created_at: /* @__PURE__ */ new Date("2026-11-14T10:00:00.000Z")
       }
-    } catch {
-    }
-    this.data.events = (this.data.events || []).filter((e) => !e.id?.startsWith("evt-10"));
-    this.data.resources = (this.data.resources || []).filter((r) => !r.id?.startsWith("res-10"));
-    this.data.interviews = [];
-    this.data.tasks = [];
-    this.data.announcements = [];
-    this.save();
-    console.log("[FallbackStore] Initialized resilient in-memory store.");
+    ];
+    this.collections.loginActivity = [
+      {
+        id: "act-sample-01",
+        user_id: superAdminUser.id,
+        student_id: superAdminProfile.student_id,
+        login_at: /* @__PURE__ */ new Date(),
+        last_active_at: /* @__PURE__ */ new Date(),
+        device: "Windows PC",
+        browser: "Chrome",
+        ip_address: "127.0.0.1",
+        user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        created_at: /* @__PURE__ */ new Date()
+      },
+      {
+        id: "act-sample-02",
+        user_id: studentUser.id,
+        student_id: studentProfile.student_id,
+        login_at: new Date(Date.now() - 36e5),
+        last_active_at: new Date(Date.now() - 18e5),
+        device: "Windows PC",
+        browser: "Chrome",
+        ip_address: "127.0.0.1",
+        user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        created_at: new Date(Date.now() - 36e5)
+      }
+    ];
   }
-  save() {
+  // Sync to real Firestore if configured
+  async syncDocToFirestore(collectionName, docId, data) {
+    if (!isFirebaseConfigured || !firestoreDb) return;
     try {
-      fs.writeFileSync(this.storePath, JSON.stringify(this.data), "utf-8");
-    } catch {
+      await setDoc(doc(firestoreDb, collectionName, docId), data, { merge: true });
+    } catch (err) {
+      console.warn(`[Firestore Sync Warning on ${collectionName}/${docId}]:`, err?.message || err);
     }
   }
-  async query(text, params = []) {
-    const raw = text.trim();
-    const lower = raw.toLowerCase();
-    if (lower.startsWith("select count(*)")) {
-      for (const table of Object.keys(this.data)) {
-        if (lower.includes(`from ${table}`)) {
-          return {
-            rows: [{ count: this.data[table].length }],
-            command: "SELECT",
-            rowCount: 1,
-            oid: 0,
-            fields: []
-          };
-        }
-      }
-      return { rows: [{ count: 0 }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+  async deleteDocFromFirestore(collectionName, docId) {
+    if (!isFirebaseConfigured || !firestoreDb) return;
+    try {
+      await deleteDoc(doc(firestoreDb, collectionName, docId));
+    } catch (err) {
+      console.warn(`[Firestore Delete Warning on ${collectionName}/${docId}]:`, err?.message || err);
     }
-    if (lower.startsWith("insert into users")) {
-      const [id, email, password_hash, role] = params;
-      const normalizedEmail = email?.toLowerCase().trim();
-      const existingIdx = this.data.users.findIndex((u) => u.email?.toLowerCase().trim() === normalizedEmail);
-      const newUser = {
-        id: id || (existingIdx >= 0 ? this.data.users[existingIdx].id : "u-" + Date.now()),
-        email: normalizedEmail,
-        password_hash,
-        role: role || "student",
-        is_verified: false,
-        created_at: /* @__PURE__ */ new Date()
-      };
-      if (existingIdx >= 0) {
-        this.data.users[existingIdx] = newUser;
+  }
+};
+var firestoreStore = new FirestoreStore();
+async function query(text, params = []) {
+  const lower = text.toLowerCase().trim();
+  if (lower.includes("from users") || lower.includes("from profiles")) {
+    if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
+      const studentCount = firestoreStore.collections.users.filter((u) => u.role === "student").length;
+      return { rows: [{ count: studentCount }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.includes("to_char") || lower.includes("group by") && lower.includes("month")) {
+      const monthCounts = {};
+      const students = firestoreStore.collections.users.filter((u) => u.role === "student");
+      if (students.length === 0) {
+        const nowStr = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { month: "short" });
+        monthCounts[nowStr] = 0;
       } else {
-        this.data.users.push(newUser);
+        for (const u of students) {
+          const d = new Date(u.created_at || Date.now());
+          const m = d.toLocaleDateString("en-US", { month: "short" });
+          monthCounts[m] = (monthCounts[m] || 0) + 1;
+        }
       }
-      this.save();
-      return { rows: [newUser], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+      const rows2 = Object.entries(monthCounts).map(([month, count]) => ({ month, count }));
+      return { rows: rows2, command: "SELECT", rowCount: rows2.length, oid: 0, fields: [] };
     }
-    if (lower.startsWith("insert into profiles")) {
-      const [id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct] = params;
-      const existingIdx = this.data.profiles.findIndex((p) => p.user_id === user_id || student_id && p.student_id === student_id);
-      const newProf = {
-        id: id || (existingIdx >= 0 ? this.data.profiles[existingIdx].id : "p-" + Date.now()),
-        user_id,
-        full_name,
-        student_id,
-        phone,
-        university,
-        college,
-        course,
-        branch,
-        year,
-        semester,
-        skills,
-        bio,
-        avatar_url,
-        completion_pct: completion_pct || 85,
-        is_active: true,
-        created_at: /* @__PURE__ */ new Date()
-      };
-      if (existingIdx >= 0) {
-        this.data.profiles[existingIdx] = newProf;
+    let emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null;
+    if (!emailParam) {
+      const matchLiteral = text.match(/['"]([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})['"]/i);
+      if (matchLiteral) {
+        emailParam = matchLiteral[1].toLowerCase().trim();
       } else {
-        this.data.profiles.push(newProf);
+        const matchId = text.match(/(?:u\.id|id)\s*=\s*['"]([a-zA-Z0-9_-]+)['"]/i);
+        if (matchId) {
+          emailParam = matchId[1].toLowerCase().trim();
+        }
       }
-      this.save();
-      return { rows: [newProf], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.startsWith("insert into email_tokens")) {
-      const [email, token, type] = params;
-      const newToken = {
-        id: "tok-" + Date.now(),
-        email: email?.toLowerCase().trim(),
-        token: String(token).trim(),
-        type: type || "verification",
-        used: false,
-        expires_at: new Date(Date.now() + 15 * 60 * 1e3),
-        created_at: /* @__PURE__ */ new Date()
-      };
-      this.data.email_tokens.push(newToken);
-      this.save();
-      return { rows: [newToken], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
-    }
-    if (lower.includes("from email_tokens")) {
-      const emailParam = params[0]?.toLowerCase().trim();
-      const tokenParam = params[1] ? String(params[1]).trim() : null;
-      const matches = this.data.email_tokens.filter((t) => {
-        const matchEmail = !emailParam || t.email === emailParam;
-        const matchToken = !tokenParam || t.token === tokenParam;
-        const notUsed = t.used === false;
-        const notExpired = new Date(t.expires_at) > /* @__PURE__ */ new Date();
-        return matchEmail && matchToken && notUsed && notExpired;
+    let matches = [...firestoreStore.collections.users];
+    if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'") && !emailParam.startsWith("%")) {
+      matches = matches.filter((u) => {
+        const prof = firestoreStore.collections.students.find((p) => p.user_id === u.id);
+        return u.email?.toLowerCase().trim() === emailParam || u.id?.toLowerCase() === emailParam || prof?.student_id?.toLowerCase() === emailParam;
       });
-      return { rows: matches, command: "SELECT", rowCount: matches.length, oid: 0, fields: [] };
     }
-    if (lower.startsWith("update email_tokens")) {
-      const idParam = params[0];
-      for (const t of this.data.email_tokens) {
-        if (t.id === idParam || t.token === idParam) {
-          t.used = true;
+    if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
+      matches = matches.filter((u) => u.role === "student");
+    }
+    for (const p of params) {
+      if (typeof p === "string" && p.startsWith("%") && p.endsWith("%")) {
+        const searchVal = p.slice(1, -1).toLowerCase().trim();
+        if (searchVal) {
+          matches = matches.filter((u) => {
+            const prof = firestoreStore.collections.students.find((pr) => pr.user_id === u.id);
+            return u.email?.toLowerCase().includes(searchVal) || prof?.full_name?.toLowerCase().includes(searchVal) || prof?.student_id?.toLowerCase().includes(searchVal);
+          });
         }
       }
-      this.save();
-      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.startsWith("update users")) {
-      if (lower.includes("is_verified")) {
-        const emailParam = params[0]?.toLowerCase().trim();
-        for (const u of this.data.users) {
-          if (u.email?.toLowerCase().trim() === emailParam || u.id === emailParam) {
-            u.is_verified = true;
-          }
-        }
-      }
-      if (lower.includes("password_hash")) {
-        const [newHash, idParam] = params;
-        for (const u of this.data.users) {
-          if (u.id === idParam || u.email?.toLowerCase().trim() === idParam?.toLowerCase().trim()) {
-            u.password_hash = newHash;
-          }
-        }
-      }
-      this.save();
-      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
-    }
-    if (lower.startsWith("insert into student_login_activity")) {
-      const [id, user_id, student_id, login_at, last_active_at, device, browser, ip_address, user_agent] = params;
-      const newAct = {
-        id: id || "act-" + Date.now(),
-        user_id,
-        student_id,
-        login_at: login_at || /* @__PURE__ */ new Date(),
-        logout_at: null,
-        last_active_at: last_active_at || /* @__PURE__ */ new Date(),
-        device: device || "Windows PC",
-        browser: browser || "Chrome",
-        ip_address: ip_address || "127.0.0.1",
-        user_agent: user_agent || "",
-        created_at: /* @__PURE__ */ new Date()
-      };
-      this.data.student_login_activity = this.data.student_login_activity || [];
-      this.data.student_login_activity.unshift(newAct);
-      this.save();
-      return { rows: [newAct], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
-    }
-    if (lower.startsWith("update student_login_activity")) {
-      this.data.student_login_activity = this.data.student_login_activity || [];
-      const [val, uid] = params;
-      for (const act of this.data.student_login_activity) {
-        if (act.user_id === uid || act.id === uid) {
-          if (lower.includes("logout_at")) act.logout_at = val || /* @__PURE__ */ new Date();
-          if (lower.includes("last_active_at")) act.last_active_at = val || /* @__PURE__ */ new Date();
-        }
-      }
-      this.save();
-      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
-    }
-    if (lower.includes("from student_login_activity")) {
-      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
-        const threshold = params[0] ? new Date(params[0]) : new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0));
-        const todayCount = (this.data.student_login_activity || []).filter((a) => a.login_at && new Date(a.login_at) >= threshold).length;
-        return { rows: [{ count: todayCount }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-      }
-      let acts = this.data.student_login_activity || [];
-      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
-      if (param0 && (lower.includes("where user_id") || lower.includes("where student_id"))) {
-        acts = acts.filter((a) => a.user_id?.toLowerCase() === param0 || a.student_id?.toLowerCase() === param0);
-      }
-      const mappedActs = acts.map((a) => {
-        const u = this.data.users.find((usr) => usr.id === a.user_id || usr.email === a.student_id);
-        const p = this.data.profiles.find((prf) => prf.user_id === a.user_id || prf.student_id === a.student_id);
-        return {
-          ...a,
-          studentName: p?.full_name || u?.email || "Student",
-          studentEmail: u?.email || a.student_id || "student@campusconnect.edu"
-        };
+    if (lower.includes("p.last_active_at >=")) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1e3);
+      matches = matches.filter((u) => {
+        const prof = firestoreStore.collections.students.find((pr) => pr.user_id === u.id);
+        return prof?.last_active_at && new Date(prof.last_active_at) >= fiveMinutesAgo;
       });
-      return { rows: mappedActs, command: "SELECT", rowCount: mappedActs.length, oid: 0, fields: [] };
     }
-    if (lower.includes("from profiles")) {
-      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
-        const threshold = params[0] ? new Date(params[0]) : new Date(Date.now() - 5 * 60 * 1e3);
-        const onlineCount = this.data.profiles.filter((p) => p.last_active_at && new Date(p.last_active_at) >= threshold).length;
-        return { rows: [{ count: onlineCount }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-      }
-      if (lower.startsWith("select coalesce(sum(") || lower.startsWith("select sum(") || lower.includes("sum(login_count)")) {
-        const total = this.data.profiles.reduce((sum, p) => sum + (p.login_count || 0), 0);
-        return { rows: [{ total }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-      }
+    if (lower.includes("order by p.full_name asc")) {
+      matches.sort((a, b) => {
+        const pa = firestoreStore.collections.students.find((p) => p.user_id === a.id)?.full_name || "";
+        const pb = firestoreStore.collections.students.find((p) => p.user_id === b.id)?.full_name || "";
+        return pa.localeCompare(pb);
+      });
+    } else if (lower.includes("order by p.login_count desc")) {
+      matches.sort((a, b) => {
+        const ca = firestoreStore.collections.students.find((p) => p.user_id === a.id)?.login_count || 0;
+        const cb = firestoreStore.collections.students.find((p) => p.user_id === b.id)?.login_count || 0;
+        return cb - ca;
+      });
+    } else if (lower.includes("order by p.last_login_at asc")) {
+      matches.sort((a, b) => {
+        const ta = new Date(firestoreStore.collections.students.find((p) => p.user_id === a.id)?.last_login_at || 0).getTime();
+        const tb = new Date(firestoreStore.collections.students.find((p) => p.user_id === b.id)?.last_login_at || 0).getTime();
+        return ta - tb;
+      });
+    } else {
+      matches.sort((a, b) => {
+        const ta = new Date(firestoreStore.collections.students.find((p) => p.user_id === a.id)?.last_login_at || 0).getTime();
+        const tb = new Date(firestoreStore.collections.students.find((p) => p.user_id === b.id)?.last_login_at || 0).getTime();
+        return tb - ta;
+      });
     }
-    if (lower.startsWith("update profiles")) {
-      const uid = params[params.length - 1];
-      const prof = this.data.profiles.find((p) => p.user_id === uid || p.id === uid);
-      if (prof) {
-        if (lower.includes("login_count")) {
-          prof.login_count = (prof.login_count || 0) + 1;
-          prof.last_login_at = /* @__PURE__ */ new Date();
-          prof.last_active_at = /* @__PURE__ */ new Date();
-          if (params[0]) prof.last_login_device = params[0];
-          if (params[1]) prof.last_login_browser = params[1];
-          if (params[2]) prof.last_login_ip = params[2];
-        } else if (lower.includes("last_active_at")) {
-          prof.last_active_at = /* @__PURE__ */ new Date();
-        }
-      }
-      this.save();
-      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    const rows = matches.map((u) => {
+      const p = firestoreStore.collections.students.find((pr) => pr.user_id === u.id) || {};
+      const certCount = firestoreStore.collections.certificates.filter(
+        (c) => c.student_id === u.id || c.student_id === p.student_id || c.student_id === u.email
+      ).length;
+      return {
+        id: u.id,
+        email: u.email,
+        password_hash: u.password_hash,
+        role: u.role,
+        is_verified: u.is_verified,
+        profile_id: p.id || "prof-" + u.id,
+        full_name: p.full_name || u.email,
+        name: p.full_name || u.email,
+        student_id: p.student_id || "GSA-2026-001",
+        studentId: p.student_id || "GSA-2026-001",
+        phone: p.phone || "",
+        university: p.university || "University",
+        college: p.college || "College",
+        course: p.course || "B.Tech",
+        branch: p.branch || "Computer Science",
+        year: p.year || 2,
+        semester: p.semester || 3,
+        skills: p.skills || ["Ambassador"],
+        bio: p.bio || "",
+        avatar_url: p.avatar_url,
+        avatarUrl: p.avatar_url,
+        completion_pct: p.completion_pct || 85,
+        completionPct: p.completion_pct || 85,
+        is_active: p.is_active ?? true,
+        isActive: p.is_active ?? true,
+        last_login_at: p.last_login_at,
+        last_active_at: p.last_active_at,
+        login_count: p.login_count || 0,
+        last_login_device: p.last_login_device || "Desktop PC",
+        last_login_browser: p.last_login_browser || "Chrome",
+        last_login_ip: p.last_login_ip || "127.0.0.1",
+        certificatesCount: certCount,
+        created_at: u.created_at || /* @__PURE__ */ new Date(),
+        createdAt: u.created_at || /* @__PURE__ */ new Date()
+      };
+    });
+    return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
+  }
+  if (lower.startsWith("insert into users")) {
+    const [id, email, password_hash, role, is_verified] = params;
+    const newUser = {
+      id: String(id || crypto.randomUUID()),
+      email: String(email).toLowerCase().trim(),
+      password_hash: String(password_hash),
+      role: role || "student",
+      is_verified: is_verified ?? false,
+      created_at: /* @__PURE__ */ new Date()
+    };
+    const idx = firestoreStore.collections.users.findIndex((u) => u.email === newUser.email);
+    if (idx >= 0) {
+      firestoreStore.collections.users[idx] = newUser;
+    } else {
+      firestoreStore.collections.users.push(newUser);
     }
-    if (lower.includes("from users")) {
-      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
-        const studentCount = this.data.users.filter((u) => u.role === "student").length;
-        return { rows: [{ count: studentCount }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-      }
-      if (lower.includes("to_char") || lower.includes("group by") && lower.includes("month")) {
-        const monthCounts = {};
-        const students = this.data.users.filter((u) => u.role === "student");
-        if (students.length === 0) {
-          const nowStr = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { month: "short" });
-          monthCounts[nowStr] = 0;
-        } else {
-          for (const u of students) {
-            const d = new Date(u.created_at || Date.now());
-            const m = d.toLocaleDateString("en-US", { month: "short" });
-            monthCounts[m] = (monthCounts[m] || 0) + 1;
-          }
-        }
-        const rows = Object.entries(monthCounts).map(([month, count]) => ({ month, count }));
-        return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
-      }
+    await firestoreStore.syncDocToFirestore("users", newUser.id, newUser);
+    return { rows: [newUser], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+  }
+  if (lower.startsWith("insert into profiles")) {
+    const [id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct, is_active] = params;
+    const newProfile = {
+      id: String(id || crypto.randomUUID()),
+      user_id: String(user_id),
+      full_name: String(full_name || ""),
+      student_id: String(student_id || "GSA-2026-001"),
+      phone: String(phone || ""),
+      university: String(university || "University"),
+      college: String(college || "College"),
+      course: String(course || "B.Tech"),
+      branch: String(branch || "Computer Science"),
+      year: Number(year) || 1,
+      semester: Number(semester) || 1,
+      skills: Array.isArray(skills) ? skills : ["Ambassador"],
+      bio: String(bio || ""),
+      avatar_url: String(avatar_url || ""),
+      completion_pct: Number(completion_pct) || 85,
+      is_active: is_active ?? true,
+      login_count: 0,
+      created_at: /* @__PURE__ */ new Date()
+    };
+    const idx = firestoreStore.collections.students.findIndex((p) => p.user_id === newProfile.user_id);
+    if (idx >= 0) {
+      firestoreStore.collections.students[idx] = { ...firestoreStore.collections.students[idx], ...newProfile };
+    } else {
+      firestoreStore.collections.students.push(newProfile);
+    }
+    await firestoreStore.syncDocToFirestore("students", newProfile.user_id, newProfile);
+    return { rows: [newProfile], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+  }
+  if (lower.startsWith("update users")) {
+    let affected = 0;
+    if (lower.includes("set is_verified = true")) {
       const emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null;
-      let matches = [...this.data.users];
-      if (emailParam && !lower.includes("where u.role = 'student'") && !lower.includes("where u.role='student'") && !emailParam.startsWith("%")) {
-        matches = matches.filter((u) => {
-          const prof = this.data.profiles.find((p) => p.user_id === u.id);
-          return u.email?.toLowerCase().trim() === emailParam || u.id?.toLowerCase() === emailParam || prof?.student_id?.toLowerCase() === emailParam;
-        });
-      }
-      if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
-        matches = matches.filter((u) => u.role === "student");
-      }
-      for (const p of params) {
-        if (typeof p === "string" && p.startsWith("%") && p.endsWith("%")) {
-          const searchVal = p.slice(1, -1).toLowerCase().trim();
-          if (searchVal) {
-            matches = matches.filter((u) => {
-              const prof = this.data.profiles.find((pr) => pr.user_id === u.id);
-              return u.email?.toLowerCase().includes(searchVal) || prof?.full_name?.toLowerCase().includes(searchVal) || prof?.student_id?.toLowerCase().includes(searchVal);
-            });
-          }
+      firestoreStore.collections.users.forEach((u) => {
+        if (emailParam && (u.email?.toLowerCase().trim() === emailParam || u.id === emailParam)) {
+          u.is_verified = true;
+          affected++;
+          firestoreStore.syncDocToFirestore("users", u.id, u);
         }
-      }
-      if (lower.includes("p.last_active_at >=")) {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1e3);
-        matches = matches.filter((u) => {
-          const prof = this.data.profiles.find((pr) => pr.user_id === u.id);
-          return prof?.last_active_at && new Date(prof.last_active_at) >= fiveMinutesAgo;
-        });
-      }
-      if (lower.includes("order by p.full_name asc")) {
-        matches.sort((a, b) => {
-          const pa = this.data.profiles.find((p) => p.user_id === a.id)?.full_name || "";
-          const pb = this.data.profiles.find((p) => p.user_id === b.id)?.full_name || "";
-          return pa.localeCompare(pb);
-        });
-      } else if (lower.includes("order by p.login_count desc")) {
-        matches.sort((a, b) => {
-          const ca = this.data.profiles.find((p) => p.user_id === a.id)?.login_count || 0;
-          const cb = this.data.profiles.find((p) => p.user_id === b.id)?.login_count || 0;
-          return cb - ca;
-        });
-      } else if (lower.includes("order by p.last_login_at asc")) {
-        matches.sort((a, b) => {
-          const ta = new Date(this.data.profiles.find((p) => p.user_id === a.id)?.last_login_at || 0).getTime();
-          const tb = new Date(this.data.profiles.find((p) => p.user_id === b.id)?.last_login_at || 0).getTime();
-          return ta - tb;
-        });
-      } else {
-        matches.sort((a, b) => {
-          const ta = new Date(this.data.profiles.find((p) => p.user_id === a.id)?.last_login_at || 0).getTime();
-          const tb = new Date(this.data.profiles.find((p) => p.user_id === b.id)?.last_login_at || 0).getTime();
-          return tb - ta;
-        });
-      }
-      const combined = matches.map((u) => {
-        const prof = this.data.profiles.find((p) => p.user_id === u.id || p.user_id === u.email || p.id === u.id) || {};
-        return {
-          ...u,
-          id: u.id,
-          email: u.email,
-          createdAt: u.created_at,
-          profileId: prof.id || u.id,
-          profile_id: prof.id || u.id,
-          name: prof.full_name || u.email,
-          full_name: prof.full_name || u.email,
-          studentId: prof.student_id || "GSA-2026-KK670",
-          student_id: prof.student_id || "GSA-2026-KK670",
-          phone: prof.phone || "",
-          university: prof.university || "University",
-          college: prof.college || "College",
-          course: prof.course || "B.Tech",
-          branch: prof.branch || "Computer Science",
-          year: prof.year || 2,
-          semester: prof.semester || 3,
-          skills: prof.skills || ["Ambassador"],
-          bio: prof.bio || "",
-          avatar_url: prof.avatar_url,
-          avatarUrl: prof.avatar_url,
-          completion_pct: prof.completion_pct || 85,
-          completionPct: prof.completion_pct || 85,
-          is_active: prof.is_active ?? true,
-          isActive: prof.is_active ?? true,
-          last_login_at: prof.last_login_at || null,
-          lastLoginAt: prof.last_login_at || null,
-          last_active_at: prof.last_active_at || null,
-          lastActiveAt: prof.last_active_at || null,
-          login_count: prof.login_count || 0,
-          loginCount: prof.login_count || 0,
-          last_login_device: prof.last_login_device || "Windows PC",
-          device: prof.last_login_device || "Windows PC",
-          last_login_browser: prof.last_login_browser || "Chrome",
-          browser: prof.last_login_browser || "Chrome",
-          last_login_ip: prof.last_login_ip || "127.0.0.1",
-          ipAddress: prof.last_login_ip || "127.0.0.1",
-          certificatesCount: this.data.certificates.filter((c) => c.student_id === u.id || c.student_id === u.email || c.student_id === prof.student_id).length
-        };
       });
-      return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
+    } else if (lower.includes("set password_hash =")) {
+      const [newHash, idOrEmail] = params;
+      const target = String(idOrEmail).toLowerCase().trim();
+      firestoreStore.collections.users.forEach((u) => {
+        if (u.id === target || u.email?.toLowerCase().trim() === target) {
+          u.password_hash = String(newHash);
+          affected++;
+          firestoreStore.syncDocToFirestore("users", u.id, u);
+        }
+      });
+    } else if (lower.includes("set role = 'super_admin'")) {
+      firestoreStore.collections.users.forEach((u) => {
+        if (u.email?.toLowerCase() === "sharmadevesh040@gmail.com") {
+          u.role = "super_admin";
+          affected++;
+          firestoreStore.syncDocToFirestore("users", u.id, u);
+        }
+      });
     }
-    if (lower.includes("from certificates")) {
-      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
-        if (lower.includes("created_at >=")) {
-          const threshold = params[0] ? new Date(params[0]) : new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0));
-          const todayCerts = this.data.certificates.filter((c) => c.created_at && new Date(c.created_at) >= threshold).length;
-          return { rows: [{ count: todayCerts }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-        }
-        const validCerts = this.data.certificates.filter((c) => c.status === "Valid").length;
-        return { rows: [{ count: validCerts }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+    return { rows: [], command: "UPDATE", rowCount: affected, oid: 0, fields: [] };
+  }
+  if (lower.startsWith("update profiles")) {
+    const userId = params[params.length - 1];
+    const p = firestoreStore.collections.students.find((pr) => pr.user_id === userId || pr.id === userId);
+    if (p) {
+      if (lower.includes("last_active_at = current_timestamp") && !lower.includes("login_count")) {
+        p.last_active_at = /* @__PURE__ */ new Date();
+      } else if (lower.includes("login_count")) {
+        const [device, browser, ip] = params;
+        p.last_login_at = /* @__PURE__ */ new Date();
+        p.last_active_at = /* @__PURE__ */ new Date();
+        p.login_count = (p.login_count || 0) + 1;
+        p.last_login_device = device;
+        p.last_login_browser = browser;
+        p.last_login_ip = ip;
+      } else if (lower.includes("set full_name =")) {
+        const [fullName] = params;
+        p.full_name = fullName;
       }
-      let certs = this.data.certificates;
-      const param0 = params[0] ? String(params[0]).trim().toLowerCase() : null;
-      if (lower.includes("where c.student_id") || lower.includes("where student_id")) {
-        certs = certs.filter((c) => {
-          const sid = String(c.student_id || "").toLowerCase();
-          const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === sid);
-          const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id?.toLowerCase() === sid);
-          return sid === param0 || stu && (stu.id.toLowerCase() === param0 || stu.email.toLowerCase() === param0) || prof && (prof.user_id.toLowerCase() === param0 || prof.student_id?.toLowerCase() === param0);
-        });
+      p.updated_at = /* @__PURE__ */ new Date();
+      await firestoreStore.syncDocToFirestore("students", p.user_id, p);
+      return { rows: [p], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    }
+    return { rows: [], command: "UPDATE", rowCount: 0, oid: 0, fields: [] };
+  }
+  if (lower.includes("student_login_activity") || lower.includes("loginactivity")) {
+    if (lower.startsWith("insert into")) {
+      const [id, user_id, student_id, device, browser, ip_address, user_agent] = params;
+      const act = {
+        id: String(id || crypto.randomUUID()),
+        user_id: String(user_id),
+        student_id: student_id ? String(student_id) : void 0,
+        login_at: /* @__PURE__ */ new Date(),
+        last_active_at: /* @__PURE__ */ new Date(),
+        device: String(device || "Desktop PC"),
+        browser: String(browser || "Chrome"),
+        ip_address: String(ip_address || "127.0.0.1"),
+        user_agent: String(user_agent || ""),
+        created_at: /* @__PURE__ */ new Date()
+      };
+      firestoreStore.collections.loginActivity.unshift(act);
+      await firestoreStore.syncDocToFirestore("loginActivity", act.id, act);
+      return { rows: [act], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("update")) {
+      const userId = params[0];
+      const latest = firestoreStore.collections.loginActivity.find((a) => a.user_id === userId && !a.logout_at);
+      if (latest) {
+        latest.last_active_at = /* @__PURE__ */ new Date();
+        await firestoreStore.syncDocToFirestore("loginActivity", latest.id, latest);
       }
-      if (lower.includes("where c.id") || lower.includes("where id =")) {
-        certs = certs.filter((c) => String(c.id).toLowerCase() === param0 || String(c.certificate_id).toLowerCase() === param0);
+      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
+      const today = /* @__PURE__ */ new Date();
+      today.setHours(0, 0, 0, 0);
+      const count = firestoreStore.collections.loginActivity.filter((a) => new Date(a.login_at) >= today).length;
+      return { rows: [{ count }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+    }
+    const limitNum = lower.includes("limit 6") ? 6 : lower.includes("limit 1") ? 1 : 100;
+    const rows = firestoreStore.collections.loginActivity.slice(0, limitNum).map((a) => {
+      const user = firestoreStore.collections.users.find((u) => u.id === a.user_id);
+      const prof = firestoreStore.collections.students.find((p) => p.user_id === a.user_id);
+      return {
+        ...a,
+        studentName: prof?.full_name || user?.email || "Student",
+        studentEmail: user?.email || "",
+        studentId: prof?.student_id || a.student_id || "GSA-2026-001"
+      };
+    });
+    return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
+  }
+  if (lower.includes("from certificates") || lower.includes("into certificates") || lower.includes("update certificates") || lower.includes("delete from certificates")) {
+    if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
+      if (lower.includes("created_at >=")) {
+        const today = /* @__PURE__ */ new Date();
+        today.setHours(0, 0, 0, 0);
+        const count2 = firestoreStore.collections.certificates.filter((c) => new Date(c.created_at) >= today).length;
+        return { rows: [{ count: count2 }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
       }
-      const combined = certs.map((c) => {
-        const stu = this.data.users.find((u) => u.id === c.student_id || u.email.toLowerCase() === String(c.student_id).toLowerCase()) || {};
-        const prof = this.data.profiles.find((p) => p.user_id === c.student_id || p.student_id === c.student_id || p.user_id === stu.id) || {};
-        return {
-          ...c,
-          title: c.title || c.certificate_name,
-          certificate_name: c.certificate_name || c.title,
-          type: c.type || c.certificate_type || "Ambassador",
-          certificate_type: c.certificate_type || c.type || "Ambassador",
-          file_key: c.file_key || c.storage_key,
-          storage_key: c.storage_key || c.file_key,
-          file_path: c.file_path || c.file_key || c.storage_key,
-          studentName: prof.full_name || "Student Recipient",
-          studentEmail: stu.email || "",
-          studentCode: prof.student_id || "GSA-2026-001",
-          studentUniversity: prof.university || "CampusConnect Ambassador Network"
-        };
-      });
-      return { rows: combined, command: "SELECT", rowCount: combined.length, oid: 0, fields: [] };
+      const count = firestoreStore.collections.certificates.filter((c) => c.status === "Valid").length;
+      return { rows: [{ count }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
     }
     if (lower.startsWith("insert into certificates")) {
-      const [
+      const id = params[0] || crypto.randomUUID();
+      const certificate_id = params[1];
+      const student_id = params[2];
+      const title = params[3] || "CampusConnect Certificate";
+      const certificate_name = params[4] || title;
+      const certificate_type = params[5] || "Ambassador";
+      const type = params[6] || certificate_type;
+      const program = params[7] || "CampusConnect Ambassador Program 2026";
+      const issue_date = params[8] || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      const description = params[9] || "";
+      const storage_key = params[10] || params[8] || "";
+      const file_key = params[11] || storage_key;
+      const file_path = params[12] || params[9] || "";
+      const file_url = params[13] || `/api/student/certificates/${certificate_id}/download`;
+      const status = params[14] || "Valid";
+      const newCert = {
         id,
         certificate_id,
         student_id,
@@ -834,373 +569,190 @@ var FallbackStore = class {
         description,
         storage_key,
         file_key,
+        file_path,
         file_url,
-        qr_code
-      ] = params;
-      const resolvedTitle = title || certificate_name || "Verified Certificate";
-      const resolvedType = certificate_type || type || "Ambassador";
-      const resolvedKey = storage_key || file_key || `certificates/${certificate_id}.pdf`;
-      const newCert = {
-        id,
-        certificate_id,
-        student_id,
-        title: resolvedTitle,
-        certificate_name: resolvedTitle,
-        certificate_type: resolvedType,
-        type: resolvedType,
-        program: program || "CampusConnect Ambassador Program",
-        issue_date: issue_date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-        description: description || "",
-        storage_key: resolvedKey,
-        file_key: resolvedKey,
-        file_path: resolvedKey,
-        file_url: file_url || `/api/student/certificates/${certificate_id}/download`,
-        qr_code,
-        status: "Valid",
-        created_at: /* @__PURE__ */ new Date(),
-        updated_at: /* @__PURE__ */ new Date()
+        status,
+        created_at: /* @__PURE__ */ new Date()
       };
-      this.data.certificates.push(newCert);
-      this.save();
+      firestoreStore.collections.certificates.unshift(newCert);
+      await firestoreStore.syncDocToFirestore("certificates", newCert.id, newCert);
       return { rows: [newCert], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
     if (lower.startsWith("delete from certificates")) {
-      const idParam = params[0] ? String(params[0]).trim().toLowerCase() : null;
-      if (idParam) {
-        this.data.certificates = this.data.certificates.filter(
-          (c) => String(c.id).toLowerCase() !== idParam && String(c.certificate_id).toLowerCase() !== idParam
-        );
+      const targetId = params[0];
+      const idx = firestoreStore.collections.certificates.findIndex((c) => c.id === targetId || c.certificate_id === targetId);
+      if (idx >= 0) {
+        const removed = firestoreStore.collections.certificates.splice(idx, 1)[0];
+        await firestoreStore.deleteDocFromFirestore("certificates", removed.id);
+        return { rows: [removed], command: "DELETE", rowCount: 1, oid: 0, fields: [] };
       }
-      this.save();
-      return { rows: [], command: "DELETE", rowCount: 1, oid: 0, fields: [] };
+      return { rows: [], command: "DELETE", rowCount: 0, oid: 0, fields: [] };
     }
     if (lower.startsWith("update certificates")) {
-      const idParam = params[params.length - 1] ? String(params[params.length - 1]).trim().toLowerCase() : null;
-      for (const c of this.data.certificates) {
-        if (String(c.id).toLowerCase() === idParam || String(c.certificate_id).toLowerCase() === idParam) {
-          if (lower.includes("status = 'revoked'")) {
-            c.status = "Revoked";
-          } else if (lower.includes("status =")) {
-            const m = text.match(/status\s*=\s*'([^']+)'/i);
-            if (m) c.status = m[1];
-          }
-          if (lower.includes("title =") && params[0]) c.title = params[0];
-          c.updated_at = /* @__PURE__ */ new Date();
+      const targetId = params[params.length - 1];
+      const cert = firestoreStore.collections.certificates.find((c) => c.id === targetId || c.certificate_id === targetId);
+      if (cert) {
+        if (lower.includes("status = 'revoked'")) {
+          cert.status = "Revoked";
         }
+        cert.updated_at = /* @__PURE__ */ new Date();
+        await firestoreStore.syncDocToFirestore("certificates", cert.id, cert);
+        return { rows: [cert], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
       }
-      this.save();
-      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+      return { rows: [], command: "UPDATE", rowCount: 0, oid: 0, fields: [] };
     }
-    if (lower.startsWith("insert into audit_logs")) {
-      const [user_id, action, resource, resource_id, metadata, ip_address] = params;
-      const newLog = {
-        id: "log-" + Date.now(),
+    let matches = [...firestoreStore.collections.certificates];
+    if (params.length > 0) {
+      const p = String(params[0]).toLowerCase();
+      matches = matches.filter(
+        (c) => c.id?.toLowerCase() === p || c.certificate_id?.toLowerCase() === p || c.student_id?.toLowerCase() === p
+      );
+    }
+    const rows = matches.map((c) => {
+      const u = firestoreStore.collections.users.find((usr) => usr.id === c.student_id || usr.email === c.student_id);
+      const p = firestoreStore.collections.students.find((prof) => prof.user_id === c.student_id || prof.student_id === c.student_id);
+      return {
+        ...c,
+        student_name: p?.full_name || u?.email || "Student Ambassador",
+        student_email: u?.email || "",
+        student_roll: p?.student_id || c.student_id
+      };
+    });
+    return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
+  }
+  if (lower.includes("events")) {
+    if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
+      return { rows: [{ count: firestoreStore.collections.events.length }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+    }
+    const studentId = params[0];
+    const rows = firestoreStore.collections.events.map((e) => {
+      const isReg = studentId ? firestoreStore.collections.eventRegistrations.some((r) => r.event_id === e.id && r.student_id === studentId) : false;
+      const attCount = firestoreStore.collections.eventRegistrations.filter((r) => r.event_id === e.id).length;
+      return {
+        ...e,
+        is_registered: isReg,
+        attendee_count: attCount
+      };
+    });
+    return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
+  }
+  if (lower.includes("event_registrations")) {
+    if (lower.startsWith("insert into")) {
+      const [id, event_id, student_id] = params;
+      const reg = {
+        id: id || crypto.randomUUID(),
+        event_id,
+        student_id,
+        registered_at: /* @__PURE__ */ new Date(),
+        status: "Registered"
+      };
+      firestoreStore.collections.eventRegistrations.push(reg);
+      await firestoreStore.syncDocToFirestore("eventRegistrations", reg.id, reg);
+      return { rows: [reg], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("delete")) {
+      const [event_id, student_id] = params;
+      firestoreStore.collections.eventRegistrations = firestoreStore.collections.eventRegistrations.filter(
+        (r) => !(r.event_id === event_id && r.student_id === student_id)
+      );
+      return { rows: [], command: "DELETE", rowCount: 1, oid: 0, fields: [] };
+    }
+  }
+  if (lower.includes("resources")) {
+    return { rows: firestoreStore.collections.resources, command: "SELECT", rowCount: firestoreStore.collections.resources.length, oid: 0, fields: [] };
+  }
+  if (lower.includes("notifications")) {
+    if (lower.startsWith("select count(")) {
+      const studentId2 = params[0];
+      const count = firestoreStore.collections.notifications.filter((n) => n.user_id === studentId2 && !n.is_read).length;
+      return { rows: [{ count }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
+    }
+    if (lower.startsWith("insert into")) {
+      const [id, user_id, title, message, type, link] = params;
+      const notif = {
+        id: id || crypto.randomUUID(),
         user_id,
-        action,
-        resource,
-        resource_id,
-        metadata: typeof metadata === "string" ? JSON.parse(metadata) : metadata,
-        ip_address,
+        title,
+        message,
+        type: type || "system",
+        is_read: false,
+        link,
         created_at: /* @__PURE__ */ new Date()
       };
-      this.data.audit_logs.push(newLog);
-      this.save();
-      return { rows: [newLog], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+      firestoreStore.collections.notifications.unshift(notif);
+      await firestoreStore.syncDocToFirestore("notifications", notif.id, notif);
+      return { rows: [notif], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.includes("from events")) {
-      if (lower.startsWith("select count(") || lower.startsWith("select count*")) {
-        return { rows: [{ count: (this.data.events || []).length }], command: "SELECT", rowCount: 1, oid: 0, fields: [] };
-      }
-      const studentId = params[0] ? String(params[0]).trim() : null;
-      const mappedEvents = (this.data.events || []).map((e) => {
-        const regs = (this.data.event_registrations || []).filter((r) => r.event_id === e.id && r.status === "Registered");
-        const isRegistered = studentId ? (this.data.event_registrations || []).some((r) => r.event_id === e.id && r.student_id === studentId && r.status === "Registered") : false;
-        return {
-          ...e,
-          meeting_link: e.meeting_link || e.meetingLink,
-          meetingLink: e.meeting_link || e.meetingLink,
-          banner_url: e.banner_url || e.bannerURL,
-          bannerURL: e.banner_url || e.bannerURL,
-          max_participants: e.max_participants || 100,
-          maxCapacity: e.max_participants || 100,
-          attendeeCount: regs.length,
-          registeredCount: regs.length,
-          isRegistered
-        };
+    if (lower.startsWith("update")) {
+      const studentId2 = params[0];
+      firestoreStore.collections.notifications.forEach((n) => {
+        if (n.user_id === studentId2) n.is_read = true;
       });
-      return { rows: mappedEvents, command: "SELECT", rowCount: mappedEvents.length, oid: 0, fields: [] };
+      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
     }
-    if (lower.startsWith("insert into event_registrations")) {
-      const [event_id, student_id] = params;
-      this.data.event_registrations = this.data.event_registrations || [];
-      const existing = this.data.event_registrations.find((r) => r.event_id === event_id && r.student_id === student_id);
-      if (existing) {
-        existing.status = "Registered";
-      } else {
-        this.data.event_registrations.push({
-          id: "reg-" + Date.now(),
-          event_id,
-          student_id,
-          status: "Registered",
-          registered_at: /* @__PURE__ */ new Date()
-        });
-      }
-      this.save();
-      return { rows: [], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
-    }
-    for (const table of Object.keys(this.data)) {
-      if (lower.startsWith(`select * from ${table}`) || lower.includes(`from ${table}`)) {
-        let rows = [...this.data[table]];
-        if (params.length > 0 && (lower.includes("where student_id =") || lower.includes("where student_id="))) {
-          const sid = String(params[0]).toLowerCase();
-          rows = rows.filter((r) => String(r.student_id || "").toLowerCase() === sid);
-        }
-        return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
-      }
-    }
-    return { rows: [], command: "UNKNOWN", rowCount: 0, oid: 0, fields: [] };
+    const studentId = params[0];
+    const rows = firestoreStore.collections.notifications.filter((n) => !studentId || n.user_id === studentId);
+    return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
   }
-};
-var fallbackStore = new FallbackStore();
-async function query(text, params = []) {
-  if (pool) {
-    try {
-      return await pool.query(text, params);
-    } catch (err) {
-      console.warn("[PostgreSQL Pool Warning, using resilient store fallback]:", err?.message || err);
-      return fallbackStore.query(text, params);
+  if (lower.includes("email_tokens")) {
+    if (lower.startsWith("insert into")) {
+      const [id, email2, token2, type, expires_at] = params;
+      const tok = {
+        id: id || crypto.randomUUID(),
+        email: String(email2).toLowerCase().trim(),
+        token: token2,
+        type,
+        used: false,
+        expires_at: expires_at || new Date(Date.now() + 30 * 6e4),
+        created_at: /* @__PURE__ */ new Date()
+      };
+      firestoreStore.collections.emailTokens.push(tok);
+      return { rows: [tok], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
     }
+    if (lower.startsWith("update")) {
+      const tokenId = params[0];
+      const t = firestoreStore.collections.emailTokens.find((tok) => tok.id === tokenId);
+      if (t) t.used = true;
+      return { rows: [], command: "UPDATE", rowCount: 1, oid: 0, fields: [] };
+    }
+    const [email, token] = params;
+    const rows = firestoreStore.collections.emailTokens.filter(
+      (t) => t.email === String(email).toLowerCase().trim() && (!token || t.token === String(token).trim()) && !t.used
+    );
+    return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
   }
-  return fallbackStore.query(text, params);
+  if (lower.includes("audit_logs")) {
+    if (lower.startsWith("insert into")) {
+      const [id, user_id, action, resource, resource_id, metadata, ip_address] = params;
+      const log = { id: id || crypto.randomUUID(), user_id, action, resource, resource_id, metadata, ip_address, created_at: /* @__PURE__ */ new Date() };
+      firestoreStore.collections.auditLogs.unshift(log);
+      await firestoreStore.syncDocToFirestore("auditLogs", log.id, log);
+      return { rows: [log], command: "INSERT", rowCount: 1, oid: 0, fields: [] };
+    }
+    return { rows: firestoreStore.collections.auditLogs.slice(0, 50), command: "SELECT", rowCount: firestoreStore.collections.auditLogs.length, oid: 0, fields: [] };
+  }
+  return { rows: [], command: "SELECT", rowCount: 0, oid: 0, fields: [] };
 }
 async function runMigration() {
-  if (!pool) {
-    console.log("[Migration] Resilient store active.");
-    fallbackStore.init();
-    return;
-  }
-  try {
-    console.log("[Migration] Running PostgreSQL schema migrations...");
-    await pool.query(SCHEMA_SQL);
-    await pool.query(`
-      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(100) DEFAULT 'Ambassador';
-      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS storage_key VARCHAR(255);
-      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS file_path VARCHAR(255);
-      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS certificate_name VARCHAR(255);
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS login_count INT NOT NULL DEFAULT 0;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_device VARCHAR(100);
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_browser VARCHAR(100);
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);
-    `).catch(() => {
-    });
-    console.log("[Migration] Schema migration completed successfully.");
-  } catch (err) {
-    console.warn("[Migration] Notice during schema migration:", err.message);
-  }
+  console.log("[Firebase Firestore] Collections ready. PostgreSQL successfully decoupled.");
+}
+async function seedDatabase() {
+  firestoreStore.seedDefaultData();
+  console.log("[Firebase Firestore] Database seeded with administrative and student records.");
 }
 
 // server/db/seed.ts
-import bcrypt from "bcryptjs";
-async function seedDatabase() {
-  console.log("[Seed] Checking and seeding real database records...");
-  const studentPass = await bcrypt.hash("PAPA@123", 10);
-  const adminPass = await bcrypt.hash("admin123", 10);
-  const superPass = await bcrypt.hash("Devesh@09", 10);
-  const defaultUsers = [
-    {
-      id: "a3a4c0bc-4df8-491d-be3c-4f1e92128e61",
-      email: "sharmadevesh040@gmail.com",
-      password_hash: superPass,
-      role: "super_admin",
-      is_verified: true,
-      profile: {
-        full_name: "DEVESH SHARMA",
-        student_id: "GSA-2026-999",
-        phone: "+91 98765 43210",
-        university: "Delhi Technological University",
-        college: "School of Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 1,
-        semester: 1,
-        skills: ["Student Ambassador", "Leadership", "System Administrator"],
-        bio: "Designated Sole Super Administrator of CampusConnect.",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA",
-        completion_pct: 100,
-        is_active: true
-      }
-    },
-    {
-      id: "u-khushi-kanu",
-      email: "khushi.kanu123@gmail.com",
-      password_hash: studentPass,
-      role: "student",
-      is_verified: true,
-      profile: {
-        full_name: "Khushi Kanu",
-        student_id: "GSA-2026-KK670",
-        phone: "+91 98765 43211",
-        university: "Delhi Technological University",
-        college: "Faculty of Engineering",
-        course: "B.Tech",
-        branch: "Computer Science",
-        year: 2,
-        semester: 3,
-        skills: ["Student Ambassador", "Leadership", "Community Outreach"],
-        bio: "Campus Ambassador & Student Representative",
-        avatar_url: "https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu",
-        completion_pct: 100,
-        is_active: true
-      }
-    }
-  ];
-  const defaultInterviews = [];
-  const defaultCertificates = [];
-  const defaultEvents = [
-    {
-      id: "evt-game-on-night-2026",
-      title: "Month's Brief \u2014 Game On Night : Imagine The Impossible",
-      description: "Official Monthly Ambassador Briefing & Community Gathering. Theme: Game On Night : Imagine The Impossible. Join the interactive session to discuss upcoming campus initiatives, interactive workshops, and Google Gemini challenges.",
-      date: "2026-11-20",
-      time: "8:00 PM",
-      venue: "Google Meet (Virtual)",
-      meeting_link: "https://meet.google.com/uur-rgbb-fgi",
-      max_participants: 500,
-      banner_url: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&auto=format&fit=crop&q=80",
-      organizer: "Campus Ambassador Lead",
-      registration_deadline: "2026-11-20T19:30:00.000Z",
-      status: "Open"
-    }
-  ];
-  const defaultTasks = [];
-  const defaultAnnouncements = [];
-  const defaultResources = [
-    {
-      id: "res-interview-questions",
-      title: "Interview questions",
-      description: "Campus Ambassador discovery questions for syllabus, notes, and Google Gemini Study Notebooks.",
-      category: "Interview Preparation",
-      type: "Document",
-      url: "#interview-questions"
-    }
-  ];
-  for (const u of defaultUsers) {
-    const idx = fallbackStore.data.users.findIndex((existing) => existing.email === u.email);
-    if (idx === -1) {
-      fallbackStore.data.users.push(u);
-      fallbackStore.data.profiles.push({ ...u.profile, user_id: u.id, id: "prof-" + u.id });
-    }
-  }
-  for (const e of defaultEvents) {
-    const idx = fallbackStore.data.events.findIndex((existing) => existing.id === e.id);
-    if (idx === -1) {
-      fallbackStore.data.events.push({ ...e, created_at: /* @__PURE__ */ new Date(), updated_at: /* @__PURE__ */ new Date() });
-    }
-  }
-  for (const r of defaultResources) {
-    const idx = fallbackStore.data.resources.findIndex((existing) => existing.id === r.id);
-    if (idx === -1) {
-      fallbackStore.data.resources.push({ ...r, created_at: /* @__PURE__ */ new Date() });
-    }
-  }
-  try {
-    for (const u of defaultUsers) {
-      await query(
-        `INSERT INTO users (id, email, password_hash, role, is_verified)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, password_hash = EXCLUDED.password_hash, is_verified = true`,
-        [u.id, u.email, u.password_hash, u.role, u.is_verified]
-      );
-      await query(
-        `INSERT INTO profiles (user_id, full_name, student_id, phone, university, college, course, branch, year, semester, skills, bio, avatar_url, completion_pct, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-         ON CONFLICT (student_id) DO UPDATE SET full_name = EXCLUDED.full_name`,
-        [
-          u.id,
-          u.profile.full_name,
-          u.profile.student_id,
-          u.profile.phone,
-          u.profile.university,
-          u.profile.college,
-          u.profile.course,
-          u.profile.branch,
-          u.profile.year,
-          u.profile.semester,
-          u.profile.skills,
-          u.profile.bio,
-          u.profile.avatar_url,
-          u.profile.completion_pct,
-          u.profile.is_active
-        ]
-      );
-    }
-    await query(`UPDATE users SET role = 'super_admin' WHERE LOWER(email) = 'sharmadevesh040@gmail.com'`);
-    await query(`UPDATE users SET role = 'student' WHERE LOWER(email) != 'sharmadevesh040@gmail.com' AND role IN ('admin', 'super_admin')`);
-    for (const item of defaultInterviews) {
-      await query(
-        `INSERT INTO interviews (id, student_id, title, organization, date, time, duration, type, location, meeting_link, interviewer, instructions, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         ON CONFLICT (id) DO NOTHING`,
-        [item.id, item.student_id, item.title, item.organization, item.date, item.time, item.duration, item.type, item.location, item.meeting_link, item.interviewer, item.instructions, item.status]
-      );
-    }
-    for (const c of defaultCertificates) {
-      await query(
-        `INSERT INTO certificates (id, certificate_id, student_id, certificate_name, program, issue_date, file_key, file_url, qr_code, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (certificate_id) DO NOTHING`,
-        [c.id, c.certificate_id, c.student_id, c.certificate_name, c.program, c.issue_date, c.file_key, c.file_url, c.qr_code, c.status]
-      );
-    }
-    await query(`DELETE FROM resources WHERE id LIKE 'res-10%'`).catch(() => {
-    });
-    await query(`DELETE FROM events WHERE id LIKE 'evt-10%'`).catch(() => {
-    });
-    for (const e of defaultEvents) {
-      await query(
-        `INSERT INTO events (id, title, description, date, time, venue, meeting_link, max_participants, banner_url, organizer, registration_deadline, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT (id) DO NOTHING`,
-        [e.id, e.title, e.description, e.date, e.time, e.venue, e.meeting_link, e.max_participants, e.banner_url, e.organizer, e.registration_deadline, e.status]
-      );
-    }
-    for (const t of defaultTasks) {
-      await query(
-        `INSERT INTO tasks (id, student_id, title, description, deadline, priority, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO NOTHING`,
-        [t.id, t.student_id, t.title, t.description, t.deadline, t.priority, t.status]
-      );
-    }
-    for (const a of defaultAnnouncements) {
-      await query(
-        `INSERT INTO announcements (id, title, message, category, priority, is_important, publish_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO NOTHING`,
-        [a.id, a.title, a.message, a.category, a.priority, a.is_important, a.publish_date]
-      );
-    }
-    for (const r of defaultResources) {
-      await query(
-        `INSERT INTO resources (id, title, description, category, type, url)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (id) DO NOTHING`,
-        [r.id, r.title, r.description, r.category, r.type, r.url]
-      );
-    }
-    console.log("[Seed] Database successfully seeded with real PostgreSQL records.");
-  } catch (err) {
-    console.error("[Seed] PostgreSQL seeding error:", err);
-  }
+async function seedDatabase2() {
+  console.log("[Seed] Seeding Firebase Firestore with authoritative CampusConnect records...");
+  await seedDatabase();
+  console.log("[Seed] Firestore database initialized successfully.");
 }
 
 // server/routes/auth.ts
 import { Router } from "express";
 import bcrypt2 from "bcryptjs";
 import { z } from "zod";
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 
 // server/middleware/auth.ts
 import jwt from "jsonwebtoken";
@@ -1502,7 +1054,7 @@ async function sendLoginOTPEmail(to, otp, fullName = "User") {
 }
 
 // server/services/activityService.ts
-import crypto from "crypto";
+import crypto2 from "crypto";
 function parseClientInfo(req) {
   const ua = req.headers["user-agent"] || "";
   let device = "Desktop PC";
@@ -1526,7 +1078,7 @@ function parseClientInfo(req) {
 async function recordStudentLogin(userId, studentId, req) {
   try {
     const client = parseClientInfo(req);
-    const activityId = crypto.randomUUID();
+    const activityId = crypto2.randomUUID();
     await query(
       `INSERT INTO student_login_activity (id, user_id, student_id, login_at, last_active_at, device, browser, ip_address, user_agent)
        VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4, $5, $6, $7)`,
@@ -1626,14 +1178,14 @@ function getAuthSecret(purpose = "") {
 function getStatelessVerificationCode(email, stepOffset = 0) {
   const secret = getAuthSecret("verification");
   const timeStep = Math.floor(Date.now() / (1e3 * 60 * 30)) + stepOffset;
-  const h = crypto2.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
+  const h = crypto3.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
   const digits = h.replace(/\D/g, "");
   return (digits.slice(0, 6) + "829471").slice(0, 6);
 }
 function getStatelessLoginOtp(email, stepOffset = 0) {
   const secret = getAuthSecret("login-otp");
   const timeStep = Math.floor(Date.now() / (1e3 * 60 * 15)) + stepOffset;
-  const h = crypto2.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
+  const h = crypto3.createHmac("sha256", secret).update(`${email.toLowerCase().trim()}:${timeStep}`).digest("hex");
   const digits = h.replace(/\D/g, "");
   return (digits.slice(0, 6) + "938152").slice(0, 6);
 }
@@ -1648,8 +1200,8 @@ router.post("/register", async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     const existing = await query(`SELECT id, is_verified FROM users WHERE LOWER(email) = LOWER($1)`, [normalizedEmail]);
     const passwordHash = await bcrypt2.hash(password, 10);
-    let newUserId = crypto2.randomUUID();
-    const newProfileId = crypto2.randomUUID();
+    let newUserId = crypto3.randomUUID();
+    const newProfileId = crypto3.randomUUID();
     const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
     if (existing.rows.length > 0) {
       newUserId = existing.rows[0].id;
@@ -2249,7 +1801,7 @@ var auth_default = router;
 
 // server/routes/student.ts
 import { Router as Router2 } from "express";
-import fs4 from "fs";
+import fs3 from "fs";
 
 // server/storage/pdfGenerator.ts
 function generateCertificatePdfBuffer(cert) {
@@ -2401,23 +1953,24 @@ ${400 + streamLength}
 }
 
 // server/mcp/certificateTools.ts
-import fs3 from "fs";
-import crypto4 from "crypto";
+import fs2 from "fs";
+import crypto5 from "crypto";
 
 // server/storage/index.ts
-import fs2 from "fs";
-import path2 from "path";
-import os2 from "os";
-import crypto3 from "crypto";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import crypto4 from "crypto";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 var isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.VERCEL_ENV);
-var UPLOAD_DIR = isServerless ? path2.join(os2.tmpdir(), "uploads") : path2.resolve(process.cwd(), "uploads");
-var CERT_DIR = path2.join(UPLOAD_DIR, "certificates");
-var AVATAR_DIR = path2.join(UPLOAD_DIR, "avatars");
-var DOCS_DIR = path2.join(UPLOAD_DIR, "documents");
+var UPLOAD_DIR = isServerless ? path.join(os.tmpdir(), "uploads") : path.resolve(process.cwd(), "uploads");
+var CERT_DIR = path.join(UPLOAD_DIR, "certificates");
+var AVATAR_DIR = path.join(UPLOAD_DIR, "avatars");
+var DOCS_DIR = path.join(UPLOAD_DIR, "documents");
 try {
   for (const dir of [UPLOAD_DIR, CERT_DIR, AVATAR_DIR, DOCS_DIR]) {
-    if (!fs2.existsSync(dir)) {
-      fs2.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
   }
 } catch (err) {
@@ -2426,50 +1979,100 @@ async function saveCertificateFile(buffer, studentId, certificateId) {
   const safeStudentId = String(studentId).replace(/[^a-zA-Z0-9_-]/g, "_");
   const safeCertId = String(certificateId).replace(/[^a-zA-Z0-9_-]/g, "_");
   const fileKey = `certificates/${safeStudentId}/${safeCertId}.pdf`;
-  const targetPath = path2.join(UPLOAD_DIR, fileKey);
-  const targetDir = path2.dirname(targetPath);
-  if (!fs2.existsSync(targetDir)) {
-    fs2.mkdirSync(targetDir, { recursive: true });
+  const targetPath = path.join(UPLOAD_DIR, fileKey);
+  try {
+    const targetDir = path.dirname(targetPath);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    fs.writeFileSync(targetPath, buffer);
+  } catch (err) {
+    console.warn("[Storage] Local write notice:", err.message);
   }
-  fs2.writeFileSync(targetPath, buffer);
+  let fileUrl = `/api/certificates/${safeCertId}/download`;
+  if (isFirebaseConfigured && firebaseApp) {
+    try {
+      const storageInstance = getStorage(firebaseApp);
+      const storageRef = ref(storageInstance, fileKey);
+      const snapshot = await uploadBytes(storageRef, buffer, {
+        contentType: "application/pdf",
+        customMetadata: {
+          studentId: safeStudentId,
+          certificateId: safeCertId,
+          uploadedAt: (/* @__PURE__ */ new Date()).toISOString()
+        }
+      });
+      fileUrl = await getDownloadURL(snapshot.ref);
+      console.log(`[Firebase Storage] Uploaded certificate ${certificateId} to ${fileKey}`);
+    } catch (err) {
+      console.warn("[Firebase Storage] Upload notice (using resilient access):", err.message);
+    }
+  }
   return {
     fileKey,
     filePath: targetPath,
+    fileUrl,
     size: buffer.length
   };
 }
-function deleteCertificateFile(fileKeyOrPath) {
+async function deleteCertificateFile(fileKeyOrPath) {
+  if (isFirebaseConfigured && firebaseApp) {
+    try {
+      const storageInstance = getStorage(firebaseApp);
+      const cleanKey = fileKeyOrPath.startsWith(UPLOAD_DIR) ? path.relative(UPLOAD_DIR, fileKeyOrPath).replace(/\\/g, "/") : fileKeyOrPath;
+      const storageRef = ref(storageInstance, cleanKey);
+      await deleteObject(storageRef);
+    } catch (err) {
+      console.warn("[Firebase Storage] Delete notice:", err.message);
+    }
+  }
   try {
-    const fullPath = fileKeyOrPath.startsWith(UPLOAD_DIR) ? fileKeyOrPath : path2.join(UPLOAD_DIR, fileKeyOrPath);
-    if (fs2.existsSync(fullPath)) {
-      fs2.unlinkSync(fullPath);
+    const fullPath = fileKeyOrPath.startsWith(UPLOAD_DIR) ? fileKeyOrPath : path.join(UPLOAD_DIR, fileKeyOrPath);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
       return true;
     }
   } catch (err) {
-    console.warn("[Storage] Failed to delete certificate file:", err);
+    console.warn("[Storage] Failed to delete local certificate file:", err);
   }
   return false;
 }
 async function saveFile(buffer, originalName, category = "documents") {
-  const ext = path2.extname(originalName) || ".pdf";
-  const fileKey = `${category}/${Date.now()}-${crypto3.randomBytes(8).toString("hex")}${ext}`;
-  const targetPath = path2.join(UPLOAD_DIR, fileKey);
-  const targetDir = path2.dirname(targetPath);
-  if (!fs2.existsSync(targetDir)) {
-    fs2.mkdirSync(targetDir, { recursive: true });
+  const ext = path.extname(originalName) || ".pdf";
+  const fileKey = `${category}/${Date.now()}-${crypto4.randomBytes(8).toString("hex")}${ext}`;
+  const targetPath = path.join(UPLOAD_DIR, fileKey);
+  try {
+    const targetDir = path.dirname(targetPath);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    fs.writeFileSync(targetPath, buffer);
+  } catch (err) {
+    console.warn("[Storage] Local write notice:", err.message);
   }
-  fs2.writeFileSync(targetPath, buffer);
+  let fileUrl = `/api/storage/files/${fileKey}`;
+  if (isFirebaseConfigured && firebaseApp) {
+    try {
+      const storageInstance = getStorage(firebaseApp);
+      const storageRef = ref(storageInstance, fileKey);
+      const mime = ext === ".pdf" ? "application/pdf" : "application/octet-stream";
+      const snapshot = await uploadBytes(storageRef, buffer, { contentType: mime });
+      fileUrl = await getDownloadURL(snapshot.ref);
+    } catch (err) {
+      console.warn("[Firebase Storage] Upload notice:", err.message);
+    }
+  }
   return {
     fileKey,
     fileName: originalName,
     mimeType: ext === ".pdf" ? "application/pdf" : "application/octet-stream",
     size: buffer.length,
-    fileUrl: `/api/storage/files/${fileKey}`
+    fileUrl
   };
 }
 function getFilePath(fileKey) {
-  const fullPath = path2.join(UPLOAD_DIR, fileKey);
-  if (fs2.existsSync(fullPath)) {
+  const fullPath = path.join(UPLOAD_DIR, fileKey);
+  if (fs.existsSync(fullPath)) {
     return fullPath;
   }
   return null;
@@ -2477,7 +2080,7 @@ function getFilePath(fileKey) {
 function generateSignedDownloadUrl(fileKey, studentId) {
   const expires = Date.now() + 1e3 * 60 * 60;
   const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
-  const hmac = crypto3.createHmac("sha256", secret);
+  const hmac = crypto4.createHmac("sha256", secret);
   hmac.update(`${fileKey}:${studentId}:${expires}`);
   const signature = hmac.digest("hex");
   return `/api/storage/download?key=${encodeURIComponent(fileKey)}&expires=${expires}&sig=${signature}&user=${encodeURIComponent(studentId)}`;
@@ -2485,10 +2088,10 @@ function generateSignedDownloadUrl(fileKey, studentId) {
 function verifySignedDownload(fileKey, studentId, expires, sig) {
   if (Date.now() > expires) return false;
   const secret = process.env.AUTH_SECRET || "campusconnect-secure-secret-key-2026";
-  const hmac = crypto3.createHmac("sha256", secret);
+  const hmac = crypto4.createHmac("sha256", secret);
   hmac.update(`${fileKey}:${studentId}:${expires}`);
   const expectedSig = hmac.digest("hex");
-  return crypto3.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig));
+  return crypto4.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig));
 }
 
 // server/mcp/certificateTools.ts
@@ -2562,8 +2165,8 @@ async function uploadCertificateTool(params) {
   if (!header.startsWith("%PDF-")) {
     return { success: false, statusCode: 400, error: "Invalid file format: Only valid PDF documents are allowed" };
   }
-  const certIdCode = `CERT-2026-${crypto4.randomBytes(3).toString("hex").toUpperCase()}`;
-  const newDbId = `cert-${Date.now()}-${crypto4.randomBytes(4).toString("hex")}`;
+  const certIdCode = `CERT-2026-${crypto5.randomBytes(3).toString("hex").toUpperCase()}`;
+  const newDbId = `cert-${Date.now()}-${crypto5.randomBytes(4).toString("hex")}`;
   let stored;
   try {
     stored = await saveCertificateFile(fileBuffer, resolvedStudentCode, certIdCode);
@@ -2758,9 +2361,9 @@ async function getCertificateTool(params) {
   const physicalPath = getFilePath(fileKey) || cert.file_path;
   const signedUrl = generateSignedDownloadUrl(fileKey, cert.student_id);
   let fileBase64;
-  if (physicalPath && fs3.existsSync(physicalPath)) {
+  if (physicalPath && fs2.existsSync(physicalPath)) {
     try {
-      fileBase64 = fs3.readFileSync(physicalPath).toString("base64");
+      fileBase64 = fs2.readFileSync(physicalPath).toString("base64");
     } catch (e) {
       console.warn("[MCP getCertificateTool] Unable to read physical file for base64:", e);
     }
@@ -2868,7 +2471,7 @@ async function verifyCertificateTool(params) {
     status: cert.status,
     verified: isValid
   });
-  const verificationHash = crypto4.createHash("sha256").update(`${cert.certificate_id}:${cert.issue_date}:${cert.status}`).digest("hex");
+  const verificationHash = crypto5.createHash("sha256").update(`${cert.certificate_id}:${cert.issue_date}:${cert.status}`).digest("hex");
   return {
     verified: isValid,
     is_valid: isValid,
@@ -2986,10 +2589,10 @@ router2.get("/certificates/:id/view", async (req, res) => {
     }
     const cert = result.certificate;
     const filename = `${cert.certificate_id}.pdf`;
-    if (cert.file_path && fs4.existsSync(cert.file_path)) {
+    if (cert.file_path && fs3.existsSync(cert.file_path)) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-      fs4.createReadStream(cert.file_path).pipe(res);
+      fs3.createReadStream(cert.file_path).pipe(res);
       return;
     }
     const pdfBuffer = generateCertificatePdfBuffer({
@@ -3023,10 +2626,10 @@ router2.get("/certificates/:id/download", async (req, res) => {
     const studentNameClean = (cert.student_name || "Student").replace(/[^a-zA-Z0-9]/g, "_");
     const titleClean = (cert.certificate_name || "Certificate").replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`;
-    if (cert.file_path && fs4.existsSync(cert.file_path)) {
+    if (cert.file_path && fs3.existsSync(cert.file_path)) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      fs4.createReadStream(cert.file_path).pipe(res);
+      fs3.createReadStream(cert.file_path).pipe(res);
       return;
     }
     const pdfBuffer = generateCertificatePdfBuffer({
@@ -3259,8 +2862,8 @@ var student_default = router2;
 
 // server/routes/admin.ts
 import { Router as Router3 } from "express";
-import fs5 from "fs";
-import crypto5 from "crypto";
+import fs4 from "fs";
+import crypto6 from "crypto";
 import bcrypt3 from "bcryptjs";
 import multer from "multer";
 import Papa from "papaparse";
@@ -3464,7 +3067,7 @@ router3.post("/students", async (req, res) => {
       res.status(400).json({ error: "Full Name, Email, and Student ID are required" });
       return;
     }
-    const newId = crypto5.randomUUID();
+    const newId = crypto6.randomUUID();
     const passwordHash = await bcrypt3.hash("welcome123", 10);
     await query(
       `INSERT INTO users (id, email, password_hash, role, is_verified)
@@ -3475,7 +3078,7 @@ router3.post("/students", async (req, res) => {
       `INSERT INTO profiles (id, user_id, full_name, student_id, phone, university, college, course, branch, year, semester, avatar_url, completion_pct, is_active)
        VALUES ($1, $2, $3, $4, $5, 'CampusConnect University Network', 'School of Technology', $6, $7, $8, $9, $10, 85, true)`,
       [
-        crypto5.randomUUID(),
+        crypto6.randomUUID(),
         newId,
         fullName,
         studentId,
@@ -3546,7 +3149,7 @@ router3.post("/students/bulk-import", async (req, res) => {
     const defaultPasswordHash = await bcrypt3.hash("welcome123", 10);
     for (const item of validRows) {
       try {
-        const newId = crypto5.randomUUID();
+        const newId = crypto6.randomUUID();
         await query(
           `INSERT INTO users (id, email, password_hash, role, is_verified)
            VALUES ($1, $2, $3, 'student', true)
@@ -3558,7 +3161,7 @@ router3.post("/students/bulk-import", async (req, res) => {
            VALUES ($1, $2, $3, $4, '', 'CampusConnect University Network', 'School of Technology', $5, $6, $7, $8, $9, 80, true)
            ON CONFLICT (student_id) DO UPDATE SET full_name = EXCLUDED.full_name`,
           [
-            crypto5.randomUUID(),
+            crypto6.randomUUID(),
             newId,
             item.name,
             item.studentId,
@@ -3842,10 +3445,10 @@ router3.get("/certificates/:id/view", async (req, res) => {
     const cert = check.rows[0];
     if (cert.file_key) {
       const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs5.existsSync(physicalPath)) {
+      if (physicalPath && fs4.existsSync(physicalPath)) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `inline; filename="${cert.certificate_id}.pdf"`);
-        fs5.createReadStream(physicalPath).pipe(res);
+        fs4.createReadStream(physicalPath).pipe(res);
         return;
       }
     }
@@ -3884,10 +3487,10 @@ router3.get("/certificates/:id/download", async (req, res) => {
     const filename = `${studentNameClean}_${titleClean}_Certificate.pdf`;
     if (cert.file_key) {
       const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs5.existsSync(physicalPath)) {
+      if (physicalPath && fs4.existsSync(physicalPath)) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-        fs5.createReadStream(physicalPath).pipe(res);
+        fs4.createReadStream(physicalPath).pipe(res);
         return;
       }
     }
@@ -4106,8 +3709,8 @@ var admin_default = router3;
 
 // server/routes/public.ts
 import { Router as Router4 } from "express";
-import fs6 from "fs";
-import path3 from "path";
+import fs5 from "fs";
+import path2 from "path";
 import jwt2 from "jsonwebtoken";
 var router4 = Router4();
 var JWT_SECRET = process.env.AUTH_SECRET || "campusconnect-jwt-secret-key-2026";
@@ -4156,14 +3759,14 @@ router4.get("/storage/download", async (req, res) => {
       return;
     }
     const physicalPath = getFilePath(key);
-    if (!physicalPath || !fs6.existsSync(physicalPath)) {
+    if (!physicalPath || !fs5.existsSync(physicalPath)) {
       res.status(404).json({ error: "File not found in storage" });
       return;
     }
-    const filename = path3.basename(physicalPath);
+    const filename = path2.basename(physicalPath);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    fs6.createReadStream(physicalPath).pipe(res);
+    fs5.createReadStream(physicalPath).pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4227,10 +3830,10 @@ router4.get("/certificates/:id/download", async (req, res) => {
     const filename = `${sanitizedStudentName}_${sanitizedTitle}_Certificate.pdf`;
     if (cert.file_key) {
       const physicalPath = getFilePath(cert.file_key);
-      if (physicalPath && fs6.existsSync(physicalPath)) {
+      if (physicalPath && fs5.existsSync(physicalPath)) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-        const stream = fs6.createReadStream(physicalPath);
+        const stream = fs5.createReadStream(physicalPath);
         stream.pipe(res);
         return;
       }
@@ -4456,7 +4059,7 @@ async function ensureInitialized() {
     initPromise = (async () => {
       try {
         await runMigration();
-        await seedDatabase();
+        await seedDatabase2();
       } catch (err) {
         console.warn("[Init Notice]:", err?.message || err);
       }

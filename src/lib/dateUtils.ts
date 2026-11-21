@@ -88,7 +88,7 @@ export function safeGetInterviewDate(val: any): string {
 }
 
 /**
- * Safely parses skills from arrays, JSON strings, or PostgreSQL text[] format like "{React,Node}".
+ * Safely parses skills from arrays, JSON strings, or array text format like "{React,Node}".
  */
 export function safeParseSkills(skills: any): string[] {
   if (Array.isArray(skills)) return skills
@@ -99,7 +99,7 @@ export function safeParseSkills(skills: any): string[] {
       const parsed = JSON.parse(trimmed)
       if (Array.isArray(parsed)) return parsed
     } catch {
-      // Postgres array string "{Skill A,Skill B}" or comma-separated string
+      // Array string "{Skill A,Skill B}" or comma-separated string
       return trimmed
         .replace(/^\{|\}$/g, '')
         .split(',')

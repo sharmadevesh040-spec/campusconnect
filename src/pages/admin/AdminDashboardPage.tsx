@@ -107,7 +107,7 @@ export default function AdminDashboardPage() {
                 <span className="spec-dot-emerald" /> COMMAND TELEMETRY
               </span>
               <span className="spec-tag">ACCESS: SUPER ADMIN</span>
-              <span className="spec-tag">NODE: POSTGRESQL LIVE</span>
+              <span className="spec-tag">NODE: FIRESTORE LIVE</span>
               {lastRefreshed && (
                 <span className="text-[10px] text-slate-400 font-mono">
                   Sync: {lastRefreshed}
@@ -154,7 +154,7 @@ export default function AdminDashboardPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE SYNC
             </span>
           </div>
-          <span className="text-xs text-slate-400 font-mono">PostgreSQL Verified</span>
+          <span className="text-xs text-slate-400 font-mono">Firebase Verified</span>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
@@ -273,7 +273,7 @@ export default function AdminDashboardPage() {
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">Student Enrollment Trajectory</h2>
                 <span className="spec-tag text-[10px]">TIME-SERIES</span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Monthly ambassador registrations recorded in PostgreSQL</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Monthly ambassador registrations recorded in Firestore</p>
             </div>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-mono text-emerald-400">
               <span className="spec-dot-emerald" /> LIVE
