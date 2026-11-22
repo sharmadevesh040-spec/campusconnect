@@ -12,6 +12,7 @@ import RegisterPage from '@/pages/auth/RegisterPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import VerifyEmailPage from '@/pages/auth/VerifyEmailPage'
+import ChangePasswordPage from '@/pages/auth/ChangePasswordPage'
 
 import DashboardPage from '@/pages/student/DashboardPage'
 import CertificatesPage from '@/pages/student/CertificatesPage'
@@ -42,11 +43,17 @@ import { UserRole } from '@/types/user'
 export const AUTHORIZED_ADMIN_EMAIL = 'sharmadevesh040@gmail.com'
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: UserRole }) {
-  const { currentUser, userProfile, loading } = useAuth()
+  const { currentUser, userProfile, loading, logout } = useAuth()
   if (loading) return <LoadingSpinner fullScreen />
   if (!currentUser) return <Navigate to="/login" replace />
 
-  // Strict check: Only AUTHORIZED_ADMIN_EMAIL can access admin portal routes
+  // If user account is disabled, immediately invalidate session
+  if (userProfile?.status === 'disabled') {
+    logout()
+    return <Navigate to="/login" replace />
+  }
+
+  // Strict check: Only AUTHORIZED_ADMIN_EMAIL or admin/super_admin can access admin portal routes
   if (role === UserRole.ADMIN) {
     const email = (userProfile?.email || currentUser?.email)?.toLowerCase().trim()
     const isAdminRole = userProfile?.role === UserRole.ADMIN || userProfile?.role === UserRole.SUPER_ADMIN
@@ -65,7 +72,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   if (loading) return <LoadingSpinner fullScreen />
   if (currentUser) {
     const email = (userProfile?.email || currentUser?.email)?.toLowerCase().trim()
-    const isAdmin = email === AUTHORIZED_ADMIN_EMAIL.toLowerCase()
+    const isAdmin = email === AUTHORIZED_ADMIN_EMAIL.toLowerCase() || userProfile?.role === UserRole.ADMIN || userProfile?.role === UserRole.SUPER_ADMIN
     return <Navigate to={isAdmin ? "/admin/dashboard" : "/student/dashboard"} replace />
   }
   return <>{children}</>
@@ -96,10 +103,11 @@ export default function App() {
       {/* Auth Routes */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-        <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/register" element={<Navigate to="/login" replace />} />
+        <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+        <Route path="/reset-password" element={<Navigate to="/login" replace />} />
+        <Route path="/verify-email" element={<Navigate to="/login" replace />} />
+        <Route path="/change-password" element={<Navigate to="/login" replace />} />
       </Route>
 
       {/* Student App Routes */}

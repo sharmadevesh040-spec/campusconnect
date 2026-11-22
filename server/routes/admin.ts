@@ -7,6 +7,7 @@ import Papa from 'papaparse'
 import QRCode from 'qrcode'
 import { requireAuth, requireRole, AuthRequest, logAudit } from '../middleware/auth'
 import { query } from '../db'
+import { firestoreStore, FirestoreMember, FirestoreUser, FirestoreStudentProfile } from '../db/firestore'
 import { saveFile, getFilePath } from '../storage'
 import { generateCertificatePdfBuffer } from '../storage/pdfGenerator'
 import { uploadCertificateTool, deleteCertificateTool } from '../mcp/certificateTools'
@@ -17,6 +18,200 @@ const upload = multer({ storage: multer.memoryStorage() })
 // All admin routes require admin or super_admin
 router.use(requireAuth)
 router.use(requireRole('admin', 'super_admin'))
+
+// POST /api/admin/members (Add Member Account directly into Firestore)
+router.post('/members', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { email, name, role } = req.body
+    if (!email || !email.includes('@')) {
+      res.status(400).json({ error: 'Valid email address is required.' })
+      return
+    }
+
+    const normalizedEmail = email.toLowerCase().trim()
+    const memberName = name?.trim() || normalizedEmail.split('@')[0]
+    const assignedRole = role === 'admin' ? 'admin' : 'member'
+
+    // Check if account already exists in members collection or users
+    const existingMember = firestoreStore.collections.members.find(
+      m => m.email.toLowerCase().trim() === normalizedEmail
+    )
+    if (existingMember) {
+      res.status(409).json({ error: `An account with email ${normalizedEmail} already exists.` })
+      return
+    }
+
+    const memberId = 'mem-' + crypto.randomUUID()
+    const DEFAULT_PASS = 'Ambassador@123'
+
+    // 1. Add to members collection
+    const newMember: FirestoreMember = {
+      id: memberId,
+      name: memberName,
+      email: normalizedEmail,
+      password: DEFAULT_PASS,
+      role: assignedRole,
+      status: 'active',
+      createdAt: new Date(),
+      lastLoginAt: null
+    }
+    firestoreStore.collections.members.unshift(newMember)
+    await firestoreStore.syncDocToFirestore('members', memberId, newMember).catch(() => {})
+
+    // 2. Add corresponding user record in users collection
+    const passHash = await bcrypt.hash(DEFAULT_PASS, 10)
+    const newUser: FirestoreUser = {
+      id: memberId,
+      uid: memberId,
+      email: normalizedEmail,
+      password_hash: passHash,
+      role: assignedRole === 'admin' ? 'admin' : 'student',
+      name: memberName,
+      firstLogin: false,
+      status: 'active',
+      is_verified: true,
+      createdAt: new Date(),
+      created_at: new Date()
+    }
+    firestoreStore.collections.users.unshift(newUser)
+    await firestoreStore.syncDocToFirestore('users', memberId, newUser).catch(() => {})
+
+    // 3. Add student profile in students collection
+    const studentId = 'GSA-2026-' + Math.floor(100000 + Math.random() * 900000)
+    const newProfile: FirestoreStudentProfile = {
+      id: `prof-${memberId}`,
+      user_id: memberId,
+      full_name: memberName,
+      student_id: studentId,
+      phone: '+91 98765 43211',
+      university: 'Delhi Technological University',
+      college: 'Faculty of Engineering',
+      course: 'B.Tech',
+      branch: 'Computer Science',
+      year: 2,
+      semester: 3,
+      skills: ['Student Ambassador', 'Leadership'],
+      bio: 'Campus Ambassador & Student Representative',
+      avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(memberName)}`,
+      completion_pct: 100,
+      is_active: true,
+      status: 'active',
+      firstLogin: false,
+      login_count: 0,
+      created_at: new Date()
+    }
+    firestoreStore.collections.students.unshift(newProfile)
+    await firestoreStore.syncDocToFirestore('students', memberId, newProfile).catch(() => {})
+
+    await logAudit(req.user?.id || 'admin', 'MEMBER_CREATE', 'members', memberId, {
+      email: normalizedEmail,
+      role: assignedRole
+    })
+
+    res.status(201).json({
+      message: `Member account successfully created for ${normalizedEmail}`,
+      member: {
+        id: memberId,
+        uid: memberId,
+        email: normalizedEmail,
+        name: memberName,
+        role: assignedRole,
+        status: 'active',
+        firstLogin: false,
+        createdAt: newMember.createdAt
+      }
+    })
+  } catch (err: any) {
+    console.error('[Create Member Error]', err)
+    res.status(500).json({ error: err.message || 'Failed to create member account.' })
+  }
+})
+
+// GET /api/admin/members (List all members and students with telemetry)
+router.get('/members', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const q = ((req.query.q as string) || '').toLowerCase().trim()
+    const statusFilter = ((req.query.status as string) || 'all').toLowerCase().trim()
+    const roleFilter = ((req.query.role as string) || 'all').toLowerCase().trim()
+
+    let sql = `
+      SELECT u.id, u.email, u.created_at as "createdAt", u.role,
+             p.id as "profileId", p.full_name as name, p.student_id as "studentId",
+             p.is_active as "isActive",
+             p.last_login_at as "lastLoginAt",
+             p.last_active_at as "lastActiveAt",
+             COALESCE(p.login_count, 0) as "loginCount",
+             p.last_login_device as "device",
+             p.last_login_browser as "browser",
+             p.last_login_ip as "ipAddress"
+      FROM users u
+      LEFT JOIN profiles p ON u.id = p.user_id
+      WHERE 1=1
+    `
+    const params: any[] = []
+
+    if (q) {
+      params.push(`%${q}%`)
+      sql += ` AND (LOWER(p.full_name) LIKE $${params.length} OR LOWER(u.email) LIKE $${params.length} OR LOWER(p.student_id) LIKE $${params.length})`
+    }
+
+    if (roleFilter !== 'all') {
+      params.push(roleFilter)
+      sql += ` AND u.role = $${params.length}`
+    }
+
+    sql += ` ORDER BY p.last_login_at DESC NULLS LAST, u.created_at DESC`
+
+    const resSql = await query(sql, params)
+
+    const mapped = resSql.rows.map(row => ({
+      id: row.id,
+      uid: row.id,
+      email: row.email,
+      name: row.name || row.email.split('@')[0],
+      role: row.role || 'member',
+      status: row.status || (row.isActive ? 'active' : 'disabled'),
+      firstLogin: Boolean(row.firstLogin),
+      createdAt: row.createdAt,
+      lastLoginAt: row.lastLoginAt,
+      lastActiveAt: row.lastActiveAt,
+      loginCount: row.loginCount || 0,
+      device: row.device || 'Windows PC',
+      browser: row.browser || 'Chrome'
+    }))
+
+    const filtered = statusFilter === 'all'
+      ? mapped
+      : mapped.filter(m => m.status === statusFilter)
+
+    res.json(filtered)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/admin/members/:id/status (Enable or disable member account)
+router.put('/members/:id/status', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const memberId = req.params.id
+    const { status } = req.body
+    if (status !== 'active' && status !== 'disabled') {
+      res.status(400).json({ error: 'Status must be active or disabled' })
+      return
+    }
+
+    const isActive = status === 'active'
+    await query(`UPDATE users SET status = $1 WHERE id = $2`, [status, memberId])
+    await query(`UPDATE profiles SET is_active = $1 WHERE user_id = $2`, [isActive, memberId]).catch(() => {})
+    await query(`UPDATE members SET status = $1 WHERE id = $2`, [status, memberId]).catch(() => {})
+
+    await logAudit(req.user?.id || 'admin', 'MEMBER_STATUS_CHANGE', 'users', memberId, { status })
+
+    res.json({ message: `Member account status updated to ${status}.`, status })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update member status' })
+  }
+})
 
 // GET /api/admin/dashboard (Platform-wide analytics from Firestore)
 router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<void> => {

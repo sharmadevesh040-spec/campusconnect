@@ -43,6 +43,7 @@ export default function AdminResourcesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [previewQuestions, setPreviewQuestions] = useState(false)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  const [questionsViewMode, setQuestionsViewMode] = useState<'cards' | 'graphic'>('cards')
   const [search, setSearch] = useState('')
   const [formData, setFormData] = useState({
     title: '',
@@ -188,47 +189,85 @@ export default function AdminResourcesPage() {
                 Google Gemini Study Notebooks & syllabus discovery conversation framework
               </p>
             </div>
-            <Badge variant="blue" className="text-xs">Interview Preparation</Badge>
-          </div>
-
-          <div className="space-y-3.5 pt-1">
-            {INTERVIEW_QUESTIONS.map((item, idx) => (
-              <div
-                key={item.num}
-                className={cn(
-                  'rounded-2xl border-2 p-4 sm:p-5 flex items-start gap-4 bg-white dark:bg-slate-900/60 shadow-sm transition-all hover:shadow-md relative group',
-                  item.borderColor
-                )}
-              >
-                {/* Question Pill Badge */}
-                <div
-                  className={cn(
-                    'w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md',
-                    item.badgeBg
-                  )}
-                >
-                  {item.num}
-                </div>
-
-                {/* Question Text */}
-                <div className="flex-1 min-w-0 pr-8">
-                  <p className="text-sm sm:text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed">
-                    {item.question}
-                  </p>
-                </div>
-
-                {/* Copy button */}
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
-                  onClick={() => handleCopyQuestion(item.question, idx)}
-                  className="absolute top-3.5 right-3.5 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 opacity-60 group-hover:opacity-100 transition-all"
-                  title="Copy question"
+                  onClick={() => setQuestionsViewMode('cards')}
+                  className={cn(
+                    'px-2.5 py-1 text-xs font-medium rounded-lg transition-all',
+                    questionsViewMode === 'cards'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  )}
                 >
-                  {copiedIdx === idx ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuestionsViewMode('graphic')}
+                  className={cn(
+                    'px-2.5 py-1 text-xs font-medium rounded-lg transition-all',
+                    questionsViewMode === 'graphic'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  )}
+                >
+                  Original Graphic
                 </button>
               </div>
-            ))}
+              <Badge variant="blue" className="text-xs">Interview Preparation</Badge>
+            </div>
           </div>
+
+          {questionsViewMode === 'graphic' ? (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950 p-2 shadow-sm">
+              <img
+                src="/interview-questions.png"
+                alt="Interview Questions — Google Gemini Study Notebooks"
+                className="w-full h-auto rounded-xl object-contain"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3.5 pt-1">
+              {INTERVIEW_QUESTIONS.map((item, idx) => (
+                <div
+                  key={item.num}
+                  className={cn(
+                    'rounded-2xl border-2 p-4 sm:p-5 flex items-start gap-4 bg-white dark:bg-slate-900/60 shadow-sm transition-all hover:shadow-md relative group',
+                    item.borderColor
+                  )}
+                >
+                  {/* Question Pill Badge */}
+                  <div
+                    className={cn(
+                      'w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md',
+                      item.badgeBg
+                    )}
+                  >
+                    {item.num}
+                  </div>
+
+                  {/* Question Text */}
+                  <div className="flex-1 min-w-0 pr-8">
+                    <p className="text-sm sm:text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed">
+                      {item.question}
+                    </p>
+                  </div>
+
+                  {/* Copy button */}
+                  <button
+                    type="button"
+                    onClick={() => handleCopyQuestion(item.question, idx)}
+                    className="absolute top-3.5 right-3.5 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 opacity-60 group-hover:opacity-100 transition-all"
+                    title="Copy question"
+                  >
+                    {copiedIdx === idx ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
             <span className="text-xs text-slate-400 font-mono">4 Ambassador Pitch Questions</span>

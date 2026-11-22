@@ -57,10 +57,16 @@ export { firebaseApp, firestoreDb }
 // Comprehensive Firestore Data Interfaces
 export interface FirestoreUser {
   id: string
+  uid?: string
   email: string
-  password_hash: string
-  role: 'student' | 'admin' | 'super_admin'
-  is_verified: boolean
+  password_hash?: string
+  role: 'student' | 'member' | 'admin' | 'super_admin'
+  name?: string
+  firstLogin?: boolean
+  status?: 'active' | 'disabled'
+  is_verified?: boolean
+  createdAt?: string | Date
+  lastLoginAt?: string | Date | null
   created_at: string | Date
   updated_at?: string | Date
 }
@@ -82,6 +88,8 @@ export interface FirestoreStudentProfile {
   avatar_url: string
   completion_pct: number
   is_active: boolean
+  firstLogin?: boolean
+  status?: 'active' | 'disabled'
   last_login_at?: string | Date | null
   last_active_at?: string | Date | null
   login_count: number
@@ -115,9 +123,12 @@ export interface FirestoreCertificate {
 
 export interface FirestoreLoginActivity {
   id: string
+  uid?: string
   user_id: string
   student_id?: string
+  email?: string
   login_at: string | Date
+  loginAt?: string | Date
   logout_at?: string | Date | null
   last_active_at: string | Date
   device: string
@@ -164,6 +175,17 @@ export interface FirestoreResource {
   created_at: string | Date
 }
 
+export interface FirestoreMember {
+  id: string
+  name: string
+  email: string
+  password: string
+  role: 'member' | 'admin' | 'super_admin'
+  status: 'active' | 'disabled'
+  createdAt: string | Date
+  lastLoginAt?: string | Date | null
+}
+
 export interface FirestoreNotification {
   id: string
   user_id: string
@@ -175,15 +197,18 @@ export interface FirestoreNotification {
   created_at: string | Date
 }
 
-function sanitizeForFirestore(obj: any): any {
+function sanitizeForFirestore(obj: any, allowPassword = false): any {
   if (obj === null || obj === undefined) return null
   if (typeof obj !== 'object') return obj
   if (obj instanceof Date) return obj
-  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore)
+  if (Array.isArray(obj)) return obj.map(item => sanitizeForFirestore(item, allowPassword))
   const clean: Record<string, any> = {}
   for (const [key, val] of Object.entries(obj)) {
+    if (!allowPassword && (key === 'password_hash' || key === 'initialPassword')) {
+      continue
+    }
     if (val !== undefined) {
-      clean[key] = sanitizeForFirestore(val)
+      clean[key] = sanitizeForFirestore(val, allowPassword)
     }
   }
   return clean
@@ -195,6 +220,7 @@ function sanitizeForFirestore(obj: any): any {
  */
 class FirestoreStore {
   public collections: {
+    members: FirestoreMember[]
     users: FirestoreUser[]
     students: FirestoreStudentProfile[]
     admins: any[]
@@ -209,6 +235,7 @@ class FirestoreStore {
     emailTokens: any[]
     auditLogs: any[]
   } = {
+    members: [],
     users: [],
     students: [],
     admins: [],
@@ -229,16 +256,47 @@ class FirestoreStore {
   }
 
   public seedDefaultData() {
-    const superPass = bcrypt.hashSync('Devesh@09', 10)
-    const studentPass = bcrypt.hashSync('PAPA@123', 10)
+    const defaultPass = 'Ambassador@123'
+    const superPass = bcrypt.hashSync(defaultPass, 10)
+    const initialMemberPass = bcrypt.hashSync(defaultPass, 10)
+
+    // Seed Default Members Collection
+    const khushiMember: FirestoreMember = {
+      id: 'mem-khushi-kanu',
+      name: 'Khushi',
+      email: 'khushi.kanu123@gmail.com',
+      password: defaultPass,
+      role: 'member',
+      status: 'active',
+      createdAt: new Date('2026-11-10T00:00:00.000Z'),
+      lastLoginAt: new Date()
+    }
+
+    const adminMember: FirestoreMember = {
+      id: 'mem-super-admin',
+      name: 'DEVESH SHARMA',
+      email: 'sharmadevesh040@gmail.com',
+      password: defaultPass,
+      role: 'admin',
+      status: 'active',
+      createdAt: new Date('2026-11-01T00:00:00.000Z'),
+      lastLoginAt: new Date()
+    }
+
+    this.collections.members = [khushiMember, adminMember]
 
     // Seed Super Admin
     const superAdminUser: FirestoreUser = {
       id: 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61',
+      uid: 'a3a4c0bc-4df8-491d-be3c-4f1e92128e61',
       email: 'sharmadevesh040@gmail.com',
       password_hash: superPass,
       role: 'super_admin',
+      name: 'DEVESH SHARMA',
+      firstLogin: false,
+      status: 'active',
       is_verified: true,
+      createdAt: new Date('2026-11-01T00:00:00.000Z'),
       created_at: new Date('2026-11-01T00:00:00.000Z')
     }
 
@@ -259,19 +317,26 @@ class FirestoreStore {
       avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=DEVESH%20SHARMA',
       completion_pct: 100,
       is_active: true,
+      status: 'active',
+      firstLogin: false,
       login_count: 24,
       last_login_at: new Date(),
       last_active_at: new Date(),
       created_at: new Date('2026-11-01T00:00:00.000Z')
     }
 
-    // Seed Khushi Kanu
+    // Seed First Pre-Created Member (Khushi Kanu) with initial password Ambassdor@123
     const studentUser: FirestoreUser = {
       id: 'u-khushi-kanu',
+      uid: 'u-khushi-kanu',
       email: 'khushi.kanu123@gmail.com',
-      password_hash: studentPass,
-      role: 'student',
+      password_hash: initialMemberPass,
+      role: 'member',
+      name: 'Khushi Kanu',
+      firstLogin: true, // Requires changing password on first login
+      status: 'active',
       is_verified: true,
+      createdAt: new Date('2026-11-10T00:00:00.000Z'),
       created_at: new Date('2026-11-10T00:00:00.000Z')
     }
 
@@ -292,6 +357,8 @@ class FirestoreStore {
       avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Kanu',
       completion_pct: 100,
       is_active: true,
+      status: 'active',
+      firstLogin: true,
       login_count: 8,
       last_login_at: new Date(),
       last_active_at: new Date(),
@@ -301,10 +368,15 @@ class FirestoreStore {
     // Seed Khushi Alias
     const studentUserAlias: FirestoreUser = {
       id: 'u-khushi-alias',
+      uid: 'u-khushi-alias',
       email: 'khushi@gmail.com',
-      password_hash: bcrypt.hashSync('Password@123', 10),
-      role: 'student',
+      password_hash: initialMemberPass,
+      role: 'member',
+      name: 'Khushi Sharma',
+      firstLogin: true,
+      status: 'active',
       is_verified: true,
+      createdAt: new Date('2026-11-10T00:00:00.000Z'),
       created_at: new Date('2026-11-10T00:00:00.000Z')
     }
 
@@ -325,6 +397,8 @@ class FirestoreStore {
       avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=Khushi%20Sharma',
       completion_pct: 100,
       is_active: true,
+      status: 'active',
+      firstLogin: true,
       login_count: 5,
       last_login_at: new Date(),
       last_active_at: new Date(),
@@ -424,13 +498,13 @@ class FirestoreStore {
   public async syncDocToFirestore(collectionName: string, docId: string, data: any) {
     if (!isFirebaseConfigured || !firestoreDb || this.firestoreDisabled) return
     try {
-      const cleanData = sanitizeForFirestore(data)
+      const cleanData = sanitizeForFirestore(data, collectionName === 'members')
       const writePromise = setDoc(doc(firestoreDb, collectionName, docId), cleanData, { merge: true })
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
       await Promise.race([writePromise, timeoutPromise])
     } catch (err: any) {
+      this.firestoreDisabled = true
       if (err?.message?.includes('Cloud Firestore API has not been used') || err?.message?.includes('PERMISSION_DENIED')) {
-        this.firestoreDisabled = true
         console.warn(`[Firestore Notice]: Cloud Firestore has not been activated yet in Firebase Console for project "${firebaseConfig.projectId}". Operating seamlessly in resilient local mode until "Create database" is clicked in Firebase Console.`)
       } else if (err?.message !== 'Timeout') {
         console.warn(`[Firestore Sync Warning on ${collectionName}/${docId}]:`, err?.message || err)
@@ -461,6 +535,68 @@ export const firestoreStore = new FirestoreStore()
  */
 export async function query(text: string, params: any[] = []): Promise<{ rows: any[]; command: string; rowCount: number; oid: number; fields: any[] }> {
   const lower = text.toLowerCase().trim()
+
+  // 0. MEMBERS COLLECTION (Simple pre-created member account system)
+  if (lower.includes('members')) {
+    if (lower.startsWith('select')) {
+      let emailParam = params[0] ? String(params[0]).toLowerCase().trim() : null
+      if (!emailParam) {
+        const matchLiteral = text.match(/['"]([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})['"]/i)
+        if (matchLiteral) {
+          emailParam = matchLiteral[1].toLowerCase().trim()
+        }
+      }
+
+      if (emailParam) {
+        const found = firestoreStore.collections.members.filter(m => m.email.toLowerCase().trim() === emailParam)
+        return { rows: found, command: 'SELECT', rowCount: found.length, oid: 0, fields: [] }
+      }
+
+      // Check by id
+      const idParam = params[0] ? String(params[0]) : null
+      if (idParam && lower.includes('where id =')) {
+        const found = firestoreStore.collections.members.filter(m => m.id === idParam)
+        return { rows: found, command: 'SELECT', rowCount: found.length, oid: 0, fields: [] }
+      }
+
+      return { rows: firestoreStore.collections.members, command: 'SELECT', rowCount: firestoreStore.collections.members.length, oid: 0, fields: [] }
+    }
+
+    if (lower.startsWith('insert into members')) {
+      const id = params[0] || crypto.randomUUID()
+      const name = params[1] || 'Member'
+      const email = String(params[2] || '').toLowerCase().trim()
+      const password = params[3] || 'Ambassador@123'
+      const role = params[4] || 'member'
+      const status = params[5] || 'active'
+      const newMember: FirestoreMember = {
+        id,
+        name,
+        email,
+        password,
+        role: role as any,
+        status: status as any,
+        createdAt: new Date(),
+        lastLoginAt: null
+      }
+      firestoreStore.collections.members.push(newMember)
+      await firestoreStore.syncDocToFirestore('members', newMember.id, newMember)
+      return { rows: [newMember], command: 'INSERT', rowCount: 1, oid: 0, fields: [] }
+    }
+
+    if (lower.startsWith('update members')) {
+      const memberId = params[params.length - 1]
+      const member = firestoreStore.collections.members.find(m => m.id === memberId || m.email.toLowerCase().trim() === String(memberId).toLowerCase().trim())
+      if (member) {
+        if (lower.includes("status = 'disabled'")) member.status = 'disabled'
+        if (lower.includes("status = 'active'")) member.status = 'active'
+        if (lower.includes('last_login_at') || lower.includes('lastloginat')) member.lastLoginAt = new Date()
+        await firestoreStore.syncDocToFirestore('members', member.id, member)
+        return { rows: [member], command: 'UPDATE', rowCount: 1, oid: 0, fields: [] }
+      }
+      return { rows: [], command: 'UPDATE', rowCount: 0, oid: 0, fields: [] }
+    }
+  }
 
   // 1. SELECT FROM users / profiles
   if (lower.includes('from users') || lower.includes('from profiles')) {
@@ -512,8 +648,8 @@ export async function query(text: string, params: any[] = []): Promise<{ rows: a
       })
     }
 
-    if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'")) {
-      matches = matches.filter(u => u.role === 'student')
+    if (lower.includes("role = 'student'") || lower.includes("u.role = 'student'") || lower.includes("u.role = 'member'")) {
+      matches = matches.filter(u => u.role === 'student' || u.role === 'member')
     }
 
     // Search query
@@ -576,13 +712,16 @@ export async function query(text: string, params: any[] = []): Promise<{ rows: a
       ).length
       return {
         id: u.id,
+        uid: u.uid || u.id,
         email: u.email,
         password_hash: u.password_hash,
         role: u.role,
+        firstLogin: u.firstLogin ?? p.firstLogin ?? false,
+        status: u.status || (p.is_active === false ? 'disabled' : 'active'),
         is_verified: u.is_verified,
         profile_id: p.id || 'prof-' + u.id,
-        full_name: p.full_name || u.email,
-        name: p.full_name || u.email,
+        full_name: p.full_name || u.name || u.email,
+        name: p.full_name || u.name || u.email,
         student_id: p.student_id || 'GSA-2026-001',
         studentId: p.student_id || 'GSA-2026-001',
         phone: p.phone || '',
@@ -699,6 +838,25 @@ export async function query(text: string, params: any[] = []): Promise<{ rows: a
           firestoreStore.syncDocToFirestore('users', u.id, u)
         }
       })
+    } else if (lower.includes('first_login = false') || lower.includes('firstlogin = false')) {
+      const idOrEmail = String(params[0] || '').toLowerCase().trim()
+      firestoreStore.collections.users.forEach(u => {
+        if (u.id === idOrEmail || u.email?.toLowerCase().trim() === idOrEmail) {
+          u.firstLogin = false
+          affected++
+          firestoreStore.syncDocToFirestore('users', u.id, u)
+        }
+      })
+    } else if (lower.includes('set status =')) {
+      const [newStatus, idOrEmail] = params
+      const target = String(idOrEmail).toLowerCase().trim()
+      firestoreStore.collections.users.forEach(u => {
+        if (u.id === target || u.email?.toLowerCase().trim() === target) {
+          u.status = (String(newStatus) === 'active' || newStatus === true) ? 'active' : 'disabled'
+          affected++
+          firestoreStore.syncDocToFirestore('users', u.id, u)
+        }
+      })
     }
     return { rows: [], command: 'UPDATE', rowCount: affected, oid: 0, fields: [] }
   }
@@ -733,11 +891,15 @@ export async function query(text: string, params: any[] = []): Promise<{ rows: a
   if (lower.includes('student_login_activity') || lower.includes('loginactivity')) {
     if (lower.startsWith('insert into')) {
       const [id, user_id, student_id, device, browser, ip_address, user_agent] = params
+      const user = firestoreStore.collections.users.find(u => u.id === String(user_id))
       const act: FirestoreLoginActivity = {
         id: String(id || crypto.randomUUID()),
+        uid: String(user_id),
         user_id: String(user_id),
         student_id: student_id ? String(student_id) : undefined,
+        email: user?.email || '',
         login_at: new Date(),
+        loginAt: new Date(),
         last_active_at: new Date(),
         device: String(device || 'Desktop PC'),
         browser: String(browser || 'Chrome'),

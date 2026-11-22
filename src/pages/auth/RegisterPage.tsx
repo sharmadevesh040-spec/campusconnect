@@ -1,5 +1,5 @@
-import SpotlightAuthForm from '@/components/auth/SpotlightAuthForm'
+import { Navigate } from 'react-router-dom'
 
 export default function RegisterPage() {
-  return <SpotlightAuthForm initialMode="register" />
+  return <Navigate to="/login" replace />
 }

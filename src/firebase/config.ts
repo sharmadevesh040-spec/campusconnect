@@ -1,5 +1,4 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app'
-import { getAuth, Auth } from 'firebase/auth'
 import { getFirestore, Firestore } from 'firebase/firestore'
 import { getStorage, FirebaseStorage } from 'firebase/storage'
 import { getAnalytics, isSupported, Analytics } from 'firebase/analytics'
@@ -8,6 +7,7 @@ import { getAnalytics, isSupported, Analytics } from 'firebase/analytics'
  * CampusConnect Firebase Configuration
  * Configured with the official campus-connect-60a9f Firebase Project
  * Prioritizes Vite environment variables (VITE_FIREBASE_*) with safe production defaults.
+ * Note: Firebase Authentication is removed per simplified direct login requirements.
  */
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDw2d3amFeLbHAXaIAgY7UreWQOmLZSyMk",
@@ -25,14 +25,12 @@ export const isFirebaseConfigured = Boolean(
 )
 
 let app: FirebaseApp
-let auth: Auth
 let db: Firestore
 let storage: FirebaseStorage
 let analytics: Analytics | undefined
 
 try {
   app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
-  auth = getAuth(app)
   db = getFirestore(app)
   storage = getStorage(app)
 
@@ -47,10 +45,10 @@ try {
 } catch (err) {
   console.warn('[Firebase] Client initialization note:', err)
   app = (getApps()[0] || {}) as FirebaseApp
-  auth = {} as Auth
   db = {} as Firestore
   storage = {} as FirebaseStorage
 }
 
-export { app, auth, db, storage, analytics }
+export const auth = null as any
+export { app, db, storage, analytics }
 export default app

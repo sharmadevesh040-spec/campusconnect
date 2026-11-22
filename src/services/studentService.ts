@@ -126,6 +126,9 @@ export interface StudentActivityItem {
   lastActiveAt?: string | null
   loginCount: number
   status: 'Online' | 'Offline'
+  role?: string
+  isActive?: boolean
+  firstLogin?: boolean
   device: string
   browser: string
   ipAddress: string
@@ -174,4 +177,18 @@ export async function sendStudentHeartbeat(): Promise<void> {
   try {
     await apiRequest('/api/student/heartbeat', { method: 'POST' })
   } catch {}
+}
+
+export async function addMember(data: { email: string; name?: string; role?: string }): Promise<any> {
+  return apiRequest('/api/admin/members', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function toggleMemberStatus(id: string, status: 'active' | 'disabled'): Promise<any> {
+  return apiRequest(`/api/admin/members/${encodeURIComponent(id)}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status })
+  })
 }

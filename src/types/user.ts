@@ -1,13 +1,18 @@
 export enum UserRole {
   STUDENT = 'student',
+  MEMBER = 'member',
   ADMIN = 'admin',
   SUPER_ADMIN = 'super_admin'
 }
 
 export interface User {
   id: string
+  uid?: string
   email: string
   role: UserRole
+  name?: string
+  firstLogin?: boolean
+  status?: 'active' | 'disabled'
   createdAt: Date
   updatedAt: Date
   isActive: boolean
@@ -33,6 +38,8 @@ export interface Profile {
   isApproved: boolean
   completionPercentage: number
   role?: UserRole
+  firstLogin?: boolean
+  status?: 'active' | 'disabled'
   createdAt: Date
   updatedAt: Date
 }

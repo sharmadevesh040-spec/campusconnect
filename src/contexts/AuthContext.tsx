@@ -16,6 +16,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<any>
   loginWithSession: (token: string, user: any) => void
   register: (email: string, password: string, name: string, studentData?: any) => Promise<any>
+  changePassword: (newPassword: string) => Promise<any>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   updateUserProfile: (data: Partial<Profile>) => Promise<void>
@@ -60,7 +61,7 @@ function mapProfile(u: any): Profile {
   return {
     id: p.id || u?.id || 'id-default',
     userId: u?.id || 'uid-default',
-    fullName: p.full_name || (isSuperAdmin ? 'Devesh Sharma' : email) || 'Student Ambassador',
+    fullName: p.full_name || (isSuperAdmin ? 'Devesh Sharma' : email) || 'Member Ambassador',
     email,
     phone: p.phone || '',
     studentId: p.student_id || 'GSA-2026-001',
@@ -76,6 +77,8 @@ function mapProfile(u: any): Profile {
     completionPercentage: Number(p.completion_pct) || 85,
     isApproved: p.is_active ?? true,
     role: (u?.role as UserRole) || fallbackRole,
+    firstLogin: Boolean(u?.firstLogin ?? p?.firstLogin ?? false),
+    status: u?.status || p?.status || (p.is_active === false ? 'disabled' : 'active'),
     createdAt: new Date(),
     updatedAt: new Date()
   }
@@ -276,12 +279,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (res.token && res.user) {
       setToken(res.token)
       const u = res.user
-      const prof = mapProfile(u)
+      const prof = mapProfile({ ...u, firstLogin: false })
       const userObj = {
         uid: u.id,
         email: u.email,
         displayName: prof.fullName,
-        photoURL: prof.photoURL
+        photoURL: prof.photoURL,
+        firstLogin: false
       }
 
       setCurrentUser(userObj)
@@ -297,6 +301,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       throw new Error('Authentication failed: Missing token or user profile')
     }
+  }
+
+  const changePassword = async (newPassword: string) => {
+    const res = await apiRequest<{ message: string; token?: string; user?: any }>('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ newPassword })
+    })
+
+    if (res.token) {
+      setToken(res.token)
+    }
+
+    if (userProfile) {
+      const updatedProf = { ...userProfile, firstLogin: false }
+      setUserProfile(updatedProf)
+      try {
+        localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(updatedProf))
+      } catch {}
+    }
+
+    if (currentUser) {
+      const updatedUser = { ...currentUser, firstLogin: false }
+      setCurrentUser(updatedUser)
+      try {
+        localStorage.setItem(USER_CACHE_KEY, JSON.stringify(updatedUser))
+      } catch {}
+    }
+
+    return res
   }
 
   const loginWithSession = (token: string, user: any) => {
@@ -389,6 +422,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         loginWithSession,
         register,
+        changePassword,
         logout,
         resetPassword,
         updateUserProfile

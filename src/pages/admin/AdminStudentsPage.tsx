@@ -19,6 +19,8 @@ import {
   approveStudent,
   disableStudent,
   bulkImportStudents,
+  addMember,
+  toggleMemberStatus,
   type StudentActivityItem,
   type StudentDetailsResponse
 } from '@/services/studentService'
@@ -48,6 +50,50 @@ export default function AdminStudentsPage() {
     errors: { row: number; error: string; data: any }[]
   } | null>(null)
   const [importing, setImporting] = useState(false)
+
+  // Add Member Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [newMemberEmail, setNewMemberEmail] = useState('')
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState<'member' | 'admin'>('member')
+  const [submittingMember, setSubmittingMember] = useState(false)
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newMemberEmail.trim()) {
+      toast.error('Member email address is required')
+      return
+    }
+
+    setSubmittingMember(true)
+    try {
+      const res = await addMember({
+        email: newMemberEmail.trim(),
+        name: newMemberName.trim(),
+        role: newMemberRole
+      })
+      toast.success(res.message || `Member account provisioned for ${newMemberEmail}!`)
+      setIsAddModalOpen(false)
+      setNewMemberEmail('')
+      setNewMemberName('')
+      setNewMemberRole('member')
+      loadStudents()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create member account')
+    } finally {
+      setSubmittingMember(false)
+    }
+  }
+
+  const handleToggleStatus = async (student: any, nextStatus: 'active' | 'disabled') => {
+    try {
+      await toggleMemberStatus(student.id, nextStatus)
+      toast.success(`Account marked ${nextStatus} for ${student.email}`)
+      loadStudents(true)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update member status')
+    }
+  }
 
   // Load students with activity telemetry
   const loadStudents = useCallback(async (silent = false) => {
@@ -223,6 +269,14 @@ export default function AdminStudentsPage() {
 
           <div className="flex flex-wrap items-center gap-2.5 flex-shrink-0">
             <Button
+              variant="tactile"
+              size="sm"
+              onClick={() => setIsAddModalOpen(true)}
+              leftIcon={<Plus className="w-4 h-4" />}
+            >
+              Add Member
+            </Button>
+            <Button
               variant="tactileDark"
               size="sm"
               onClick={() => loadStudents()}
@@ -231,7 +285,7 @@ export default function AdminStudentsPage() {
               Sync Feeds
             </Button>
             <Button
-              variant="tactile"
+              variant="tactileDark"
               size="sm"
               onClick={() => setIsBulkModalOpen(true)}
               leftIcon={<FileUp className="w-4 h-4" />}
@@ -341,13 +395,13 @@ export default function AdminStudentsPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-500 uppercase tracking-wider">
               <tr>
-                <th className="py-3.5 px-4 font-semibold">Student Ambassador</th>
-                <th className="py-3.5 px-4 font-semibold">Status</th>
+                <th className="py-3.5 px-4 font-semibold">Member Ambassador</th>
+                <th className="py-3.5 px-4 font-semibold">Role</th>
+                <th className="py-3.5 px-4 font-semibold">Account Status</th>
+                <th className="py-3.5 px-4 font-semibold">Activity Radar</th>
                 <th className="py-3.5 px-4 font-semibold">Last Login</th>
-                <th className="py-3.5 px-4 font-semibold">Last Active</th>
                 <th className="py-3.5 px-4 font-semibold">Logins</th>
                 <th className="py-3.5 px-4 font-semibold">Device / Browser</th>
-                <th className="py-3.5 px-4 font-semibold">Credentials</th>
                 <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -402,16 +456,42 @@ export default function AdminStudentsPage() {
                         </div>
                       </td>
 
-                      {/* Online Status */}
+                      {/* Role */}
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                          student.role === 'admin' || student.role === 'super_admin'
+                            ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        }`}>
+                          {student.role === 'admin' || student.role === 'super_admin' ? 'ADMIN' : 'MEMBER'}
+                        </span>
+                      </td>
+
+                      {/* Account Status */}
+                      <td className="py-3.5 px-4">
+                        {student.isActive !== false ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Disabled
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Online Status Radar */}
                       <td className="py-3.5 px-4">
                         {isOnline ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             Online
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
                             Offline
                           </span>
                         )}
@@ -425,18 +505,6 @@ export default function AdminStudentsPage() {
                           </p>
                           <p className="text-[11px] text-slate-400 font-mono">
                             {student.lastLoginAt ? formatExactDateTime(student.lastLoginAt) : 'Never logged in'}
-                          </p>
-                        </div>
-                      </td>
-
-                      {/* Last Active */}
-                      <td className="py-3.5 px-4">
-                        <div className="text-xs">
-                          <p className="font-medium text-slate-700 dark:text-slate-300">
-                            {formatTimeAgo(student.lastActiveAt)}
-                          </p>
-                          <p className="text-[11px] text-slate-400 font-mono">
-                            {student.lastActiveAt ? new Date(student.lastActiveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
                           </p>
                         </div>
                       </td>
@@ -463,24 +531,37 @@ export default function AdminStudentsPage() {
                         <p className="text-[10px] font-mono text-slate-400 mt-0.5">{student.ipAddress || '127.0.0.1'}</p>
                       </td>
 
-                      {/* Credentials */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
-                          <Award className="w-3 h-3 text-amber-500" />
-                          {student.certificatesCount || 0}
-                        </span>
-                      </td>
-
                       {/* Action */}
                       <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenStudentDetails(student.id)}
-                          className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                        >
-                          View Details
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {student.isActive !== false ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleStatus(student, 'disabled')}
+                              className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 h-8 px-2.5"
+                            >
+                              Disable
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleStatus(student, 'active')}
+                              className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8 px-2.5"
+                            >
+                              Enable
+                            </Button>
+                          )}
+                          <Button
+                            variant="tactileDark"
+                            size="sm"
+                            onClick={() => handleOpenStudentDetails(student.id)}
+                            className="text-xs h-8 px-2.5"
+                          >
+                            Details
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -777,6 +858,72 @@ export default function AdminStudentsPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* ── Add Member Modal ── */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add Member Account"
+      >
+        <form onSubmit={handleAddMember} className="space-y-4">
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Add an official member account to Firestore. The member logs in directly with their email and password (<code className="font-mono text-amber-500 font-bold">Ambassador@123</code>).
+          </p>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Member Email Address *</label>
+            <Input
+              type="email"
+              value={newMemberEmail}
+              onChange={(e) => setNewMemberEmail(e.target.value)}
+              placeholder="e.g. khushi.kanu123@gmail.com"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Member Full Name (Optional)</label>
+            <Input
+              type="text"
+              value={newMemberName}
+              onChange={(e) => setNewMemberName(e.target.value)}
+              placeholder="e.g. Khushi Kanu"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Account Role</label>
+            <select
+              value={newMemberRole}
+              onChange={(e) => setNewMemberRole(e.target.value as any)}
+              className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-slate-800 dark:text-slate-200 focus:outline-none"
+            >
+              <option value="member">Member (Student Ambassador)</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-2xl text-xs space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+              <ShieldCheck className="w-4 h-4 text-amber-500" />
+              <span>Initial Security Credential</span>
+            </div>
+            <p className="text-amber-700 dark:text-amber-400 text-[11px] leading-relaxed">
+              Initial Password: <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded text-amber-900 dark:text-amber-200">Ambassdor@123</code>.
+              Passwords are never saved in Firestore. The member is forced to set their own permanent password on their first login.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" type="button" onClick={() => setIsAddModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="tactile" size="sm" type="submit" disabled={submittingMember}>
+              {submittingMember ? 'Provisioning Account...' : 'Create Member Account'}
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   )
