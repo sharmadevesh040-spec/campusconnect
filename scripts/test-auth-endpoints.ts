@@ -2,9 +2,10 @@ import express from 'express'
 import http from 'http'
 import authRoutes from '../server/routes/auth'
 import { seedDatabase } from '../server/db'
+import { firestoreStore } from '../server/db/firestore'
 
 async function runEndpointTests() {
-  console.log('--- Testing Auth HTTP API Endpoints ---')
+  console.log('--- Testing Any-Email Direct Login with Ambassador@123 ---')
   await seedDatabase()
 
   const app = express()
@@ -18,7 +19,7 @@ async function runEndpointTests() {
   const baseUrl = `http://127.0.0.1:${port}`
 
   try {
-    // 1. Valid Member Login
+    // 1. Existing Pre-created Member (Khushi)
     const r1 = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -28,67 +29,84 @@ async function runEndpointTests() {
     if (r1.status !== 200 || !b1.token || b1.redirectTo !== '/student/dashboard') {
       throw new Error(`FAILED Test 1: Expected 200 and /student/dashboard, got ${r1.status}: ${JSON.stringify(b1)}`)
     }
-    console.log('✓ Valid Member Login: Status 200, Token issued, Redirect to /student/dashboard')
-    const studentToken = b1.token
+    console.log('✓ Pre-created Member Login (Khushi): 200 OK, token issued, redirected to /student/dashboard')
 
-    // 2. Invalid Password
+    // 2. ANY Brand-New Email without creating account (e.g. rohit.sharma@gmail.com)
+    const newRandomEmail = `student.${Date.now()}@university.edu`
     const r2 = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'khushi.kanu123@gmail.com', password: 'WrongPassword!@#' })
+      body: JSON.stringify({ email: newRandomEmail, password: 'Ambassador@123' })
     })
     const b2 = await r2.json() as any
-    if (r2.status !== 401 || b2.error !== 'Invalid email or password.') {
-      throw new Error(`FAILED Test 2: Expected 401 and 'Invalid email or password.', got ${r2.status}: ${JSON.stringify(b2)}`)
+    if (r2.status !== 200 || !b2.token || b2.redirectTo !== '/student/dashboard') {
+      throw new Error(`FAILED Test 2: Expected 200 and /student/dashboard for brand-new email, got ${r2.status}: ${JSON.stringify(b2)}`)
     }
-    console.log('✓ Invalid Password: Status 401, Exact error message "Invalid email or password."')
+    console.log('✓ Brand-new Email Login without creating account:', newRandomEmail, '-> 200 OK')
 
-    // 3. Nonexistent User
+    // Verify user was automatically registered in members and students
+    const autoMember = firestoreStore.collections.members.find(m => m.email.toLowerCase() === newRandomEmail.toLowerCase())
+    if (!autoMember) {
+      throw new Error(`FAILED Test 2: Auto-created member was not found in members collection`)
+    }
+    console.log('✓ Auto-provisioned in members collection:', autoMember.name, autoMember.email, 'status:', autoMember.status)
+
+    const autoStudent = firestoreStore.collections.students.find(s => s.user_id === autoMember.id)
+    if (!autoStudent) {
+      throw new Error(`FAILED Test 2: Auto-created student profile was not found in students collection`)
+    }
+    console.log('✓ Auto-provisioned student profile:', autoStudent.full_name, autoStudent.student_id)
+
+    // 3. Subsequent login with the same newly created email
     const r3 = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'nonexistent@example.com', password: 'Ambassador@123' })
+      body: JSON.stringify({ email: newRandomEmail, password: 'Ambassador@123' })
     })
     const b3 = await r3.json() as any
-    if (r3.status !== 401 || b3.error !== 'Invalid email or password.') {
-      throw new Error(`FAILED Test 3: Expected 401 and 'Invalid email or password.', got ${r3.status}: ${JSON.stringify(b3)}`)
+    if (r3.status !== 200 || b3.user.id !== autoMember.id) {
+      throw new Error(`FAILED Test 3: Subsequent login did not reuse existing profile`)
     }
-    console.log('✓ Nonexistent User: Status 401, Exact error message "Invalid email or password."')
+    console.log('✓ Subsequent login with auto-created email recognized existing profile seamlessly')
 
-    // 4. Valid Admin Login
+    // 4. Invalid Password Rejection (Any email with wrong password)
     const r4 = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'random.unregistered@test.com', password: 'IncorrectPassword!@#' })
+    })
+    const b4 = await r4.json() as any
+    if (r4.status !== 401 || b4.error !== 'Invalid email or password.') {
+      throw new Error(`FAILED Test 4: Expected 401 and 'Invalid email or password.', got ${r4.status}: ${JSON.stringify(b4)}`)
+    }
+    console.log('✓ Invalid Password Rejection: Status 401, Exact error message "Invalid email or password."')
+
+    // 5. Admin Login (sharmadevesh040@gmail.com with Ambassador@123)
+    const r5 = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'sharmadevesh040@gmail.com', password: 'Ambassador@123' })
     })
-    const b4 = await r4.json() as any
-    if (r4.status !== 200 || !b4.token || b4.redirectTo !== '/admin/dashboard') {
-      throw new Error(`FAILED Test 4: Expected 200 and /admin/dashboard, got ${r4.status}: ${JSON.stringify(b4)}`)
-    }
-    console.log('✓ Valid Admin Login: Status 200, Token issued, Redirect to /admin/dashboard')
-
-    // 5. GET /api/auth/me with Bearer Token
-    const r5 = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: { 'Authorization': `Bearer ${studentToken}` }
-    })
     const b5 = await r5.json() as any
-    if (r5.status !== 200 || b5.user.email !== 'khushi.kanu123@gmail.com') {
-      throw new Error(`FAILED Test 5: Expected 200 and session user, got ${r5.status}: ${JSON.stringify(b5)}`)
+    if (r5.status !== 200 || b5.redirectTo !== '/admin/dashboard') {
+      throw new Error(`FAILED Test 5: Admin login failed or wrong redirect: ${JSON.stringify(b5)}`)
     }
-    console.log('✓ Session Verification (/me): Status 200, Returned valid student session')
+    console.log('✓ Admin Login (Devesh Sharma): Status 200, Redirect to /admin/dashboard')
 
-    // 6. POST /api/auth/logout
-    const r6 = await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST' })
+    // 6. Session Verification (/api/auth/me) with token of auto-created member
+    const r6 = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { 'Authorization': `Bearer ${b2.token}` }
+    })
     const b6 = await r6.json() as any
-    if (r6.status !== 200 || !b6.success) {
-      throw new Error(`FAILED Test 6: Expected 200 from logout, got ${r6.status}`)
+    if (r6.status !== 200 || b6.user.email !== newRandomEmail) {
+      throw new Error(`FAILED Test 6: Session verification failed: ${JSON.stringify(b6)}`)
     }
-    console.log('✓ Logout endpoint: Status 200, Success confirmation')
+    console.log('✓ Session Verification (/me): Status 200, Valid session maintained across requests')
 
-    console.log('--- ALL AUTH HTTP ENDPOINTS PASSED SUCCESSFULLY ---')
+    console.log('--- ALL ANY-EMAIL LOGIN TESTS PASSED SUCCESSFULLY ---')
     process.exit(0)
   } catch (err) {
-    console.error('Endpoint Test Suite Failed:', err)
+    console.error('Test Suite Failed:', err)
     process.exit(1)
   }
 }

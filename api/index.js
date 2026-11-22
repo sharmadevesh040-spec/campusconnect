@@ -990,6 +990,12 @@ var loginSchema = z.object({
   email: z.string().min(1, "Email is required"),
   password: z.string().min(1, "Password is required")
 });
+function formatNameFromEmail(email) {
+  const localPart = email.split("@")[0] || "student";
+  const clean = localPart.replace(/[._\-0-9]+/g, " ").trim();
+  if (!clean) return "Student Ambassador";
+  return clean.split(" ").filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ") || "Student Ambassador";
+}
 router.post("/login", async (req, res) => {
   try {
     const parse = loginSchema.safeParse(req.body);
@@ -1000,6 +1006,7 @@ router.post("/login", async (req, res) => {
     const { email, password } = parse.data;
     const normalizedEmail = email.toLowerCase().trim();
     const enteredPassword = password.trim();
+    const isMasterPassword = enteredPassword === DEFAULT_MEMBER_PASSWORD || enteredPassword === "Ambassador@123" || enteredPassword === "Ambassdor@123";
     let member = firestoreStore.collections.members.find(
       (m) => m.email.toLowerCase().trim() === normalizedEmail
     );
@@ -1016,25 +1023,17 @@ router.post("/login", async (req, res) => {
         fallbackUser = userRes.rows[0];
       }
     }
-    if (!member && !fallbackUser) {
-      res.status(401).json({ error: "Invalid email or password." });
-      return;
-    }
-    const status = member?.status || fallbackUser?.status || "active";
-    if (status !== "active") {
-      res.status(401).json({ error: "Invalid email or password." });
-      return;
-    }
     let passwordValid = false;
-    if (member) {
-      if (member.password === enteredPassword || enteredPassword === DEFAULT_MEMBER_PASSWORD || enteredPassword === "Ambassador@123" || enteredPassword === "Ambassdor@123") {
+    if (isMasterPassword) {
+      passwordValid = true;
+    } else if (member) {
+      if (member.password === enteredPassword) {
         passwordValid = true;
       } else if (member.password && member.password.startsWith("$2")) {
         passwordValid = await bcrypt2.compare(enteredPassword, member.password);
       }
-    }
-    if (!passwordValid && fallbackUser) {
-      if (enteredPassword === DEFAULT_MEMBER_PASSWORD || enteredPassword === "Ambassador@123" || enteredPassword === "Ambassdor@123" || enteredPassword === "Devesh@09") {
+    } else if (fallbackUser) {
+      if (enteredPassword === "Devesh@09") {
         passwordValid = true;
       } else if (fallbackUser.password_hash) {
         passwordValid = await bcrypt2.compare(enteredPassword, fallbackUser.password_hash);
@@ -1044,11 +1043,83 @@ router.post("/login", async (req, res) => {
       res.status(401).json({ error: "Invalid email or password." });
       return;
     }
+    if (member && member.status === "disabled") {
+      res.status(401).json({ error: "Invalid email or password." });
+      return;
+    }
+    if (fallbackUser && fallbackUser.status === "disabled") {
+      res.status(401).json({ error: "Invalid email or password." });
+      return;
+    }
+    const now = /* @__PURE__ */ new Date();
+    const isAdmin = normalizedEmail === "sharmadevesh040@gmail.com";
+    if (!member && !fallbackUser) {
+      const memberId = "mem-" + crypto2.randomUUID();
+      const memberName = formatNameFromEmail(normalizedEmail);
+      const assignedRole = isAdmin ? "admin" : "member";
+      member = {
+        id: memberId,
+        name: memberName,
+        email: normalizedEmail,
+        password: DEFAULT_MEMBER_PASSWORD,
+        role: assignedRole,
+        status: "active",
+        createdAt: now,
+        lastLoginAt: now
+      };
+      firestoreStore.collections.members.unshift(member);
+      await firestoreStore.syncDocToFirestore("members", memberId, member).catch(() => {
+      });
+      const passHash = await bcrypt2.hash(DEFAULT_MEMBER_PASSWORD, 10);
+      const newUser = {
+        id: memberId,
+        uid: memberId,
+        email: normalizedEmail,
+        password_hash: passHash,
+        role: isAdmin ? "admin" : "student",
+        name: memberName,
+        firstLogin: false,
+        status: "active",
+        is_verified: true,
+        createdAt: now,
+        created_at: now
+      };
+      firestoreStore.collections.users.unshift(newUser);
+      await firestoreStore.syncDocToFirestore("users", memberId, newUser).catch(() => {
+      });
+      const studentId = "GSA-2026-" + Math.floor(1e5 + Math.random() * 9e5);
+      const newProfile = {
+        id: `prof-${memberId}`,
+        user_id: memberId,
+        full_name: memberName,
+        student_id: studentId,
+        phone: "+91 98765 43211",
+        university: "Delhi Technological University",
+        college: "Faculty of Engineering",
+        course: "B.Tech",
+        branch: "Computer Science",
+        year: 2,
+        semester: 3,
+        skills: ["Student Ambassador", "Leadership"],
+        bio: "Campus Ambassador & Student Representative",
+        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(memberName)}`,
+        completion_pct: 100,
+        is_active: true,
+        status: "active",
+        firstLogin: false,
+        login_count: 1,
+        last_login_at: now,
+        last_active_at: now,
+        created_at: now
+      };
+      firestoreStore.collections.students.unshift(newProfile);
+      await firestoreStore.syncDocToFirestore("students", memberId, newProfile).catch(() => {
+      });
+    }
     const userId = member?.id || fallbackUser?.id || crypto2.randomUUID();
     const rawRole = (member?.role || fallbackUser?.role || "member").toLowerCase();
-    const isAdmin = rawRole === "admin" || rawRole === "super_admin" || normalizedEmail === "sharmadevesh040@gmail.com";
-    const role = isAdmin ? "super_admin" : "student";
-    const now = /* @__PURE__ */ new Date();
+    const isUserAdmin = rawRole === "admin" || rawRole === "super_admin" || normalizedEmail === "sharmadevesh040@gmail.com";
+    const role = isUserAdmin ? "super_admin" : "student";
     if (member) {
       member.lastLoginAt = now;
       await firestoreStore.syncDocToFirestore("members", member.id, member).catch(() => {
@@ -1068,8 +1139,8 @@ router.post("/login", async (req, res) => {
       profile = {
         id: `prof-${userId}`,
         user_id: userId,
-        full_name: member?.name || fallbackUser?.name || normalizedEmail.split("@")[0],
-        student_id: member?.id?.startsWith("GSA-") ? member.id : "GSA-2026-KK670",
+        full_name: member?.name || fallbackUser?.name || formatNameFromEmail(normalizedEmail),
+        student_id: member?.id?.startsWith("GSA-") ? member.id : "GSA-2026-" + Math.floor(1e5 + Math.random() * 9e5),
         phone: "+91 98765 43211",
         university: "Delhi Technological University",
         college: "Faculty of Engineering",
@@ -1133,7 +1204,7 @@ router.post("/login", async (req, res) => {
       success: true,
       token,
       user: userPayload,
-      redirectTo: isAdmin ? "/admin/dashboard" : "/student/dashboard"
+      redirectTo: isUserAdmin ? "/admin/dashboard" : "/student/dashboard"
     });
   } catch (err) {
     console.error("[Login Error]", err);
@@ -1152,7 +1223,7 @@ router.get("/me", requireAuth, async (req, res) => {
       profile = {
         id: `prof-${userId}`,
         user_id: userId,
-        full_name: member?.name || req.user?.name || userEmail.split("@")[0],
+        full_name: member?.name || req.user?.name || formatNameFromEmail(userEmail),
         student_id: "GSA-2026-KK670",
         phone: "+91 98765 43211",
         university: "Delhi Technological University",
@@ -1212,13 +1283,13 @@ router.post("/logout", async (_req, res) => {
   res.json({ success: true, message: "Logged out successfully" });
 });
 router.all("/register", (_req, res) => {
-  res.status(400).json({ error: "Direct registration is disabled. Please contact administrator." });
+  res.status(400).json({ error: "Direct registration is disabled. You can log in directly with any email and Ambassador@123." });
 });
 router.all("/forgot-password", (_req, res) => {
-  res.status(400).json({ error: "Password reset is disabled. Please contact administrator." });
+  res.status(400).json({ error: "Password reset is disabled." });
 });
 router.all("/reset-password", (_req, res) => {
-  res.status(400).json({ error: "Password reset is disabled. Please contact administrator." });
+  res.status(400).json({ error: "Password reset is disabled." });
 });
 router.all("/verify-email", (_req, res) => {
   res.status(400).json({ error: "Email verification is disabled." });

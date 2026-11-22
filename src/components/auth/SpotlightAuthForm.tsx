@@ -224,7 +224,7 @@ export default function SpotlightAuthForm() {
             Sign In
           </h1>
           <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-            Enter your credentials to access the Campus Connect dashboard
+            Log in directly with your email and password
           </p>
         </div>
 
@@ -272,7 +272,7 @@ export default function SpotlightAuthForm() {
                     if (errorMessage) setErrorMessage(null)
                   }}
                   onFocus={() => setActiveField('email')}
-                  placeholder="khushi.kanu123@gmail.com"
+                  placeholder="you@gmail.com or university email"
                   className="w-full bg-transparent pl-10 pr-4 py-3 text-sm text-white placeholder-zinc-500 rounded-2xl focus:outline-none"
                   autoComplete="username"
                   required
